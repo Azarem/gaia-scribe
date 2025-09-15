@@ -1,0 +1,446 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @db.Uuid
+  name      String?  @unique
+  email     String?  @unique
+  avatarUrl String?
+  groups    String[]  @default(["user"])
+
+  lastActiveProject    ScribeProject? @relation(fields: [lastActiveProjectId], references: [id])
+  lastActiveProjectId  String?
+  lastActiveObjectId   String?
+  lastActiveObjectType String?
+
+  createdProjects ScribeProject[] @relation("projectCreatedBy")
+  updatedProjects ScribeProject[] @relation("projectUpdatedBy")
+  deletedProjects ScribeProject[] @relation("projectDeletedBy")
+  createdCops      Cop[]        @relation("copCreatedBy")
+  updatedCops      Cop[]        @relation("copUpdatedBy")
+  deletedCops      Cop[]        @relation("copDeletedBy")
+  createdLabels    Label[]      @relation("labelCreatedBy")
+  updatedLabels    Label[]      @relation("labelUpdatedBy")
+  deletedLabels    Label[]      @relation("labelDeletedBy")
+  createdFiles     File[]       @relation("fileCreatedBy")
+  updatedFiles     File[]       @relation("fileUpdatedBy")
+  deletedFiles     File[]       @relation("fileDeletedBy")
+  createdBlocks    Block[]      @relation("blockCreatedBy")
+  updatedBlocks    Block[]      @relation("blockUpdatedBy")
+  deletedBlocks    Block[]      @relation("blockDeletedBy")
+  createdParts     BlockPart[]  @relation("partCreatedBy")
+  updatedParts     BlockPart[]  @relation("partUpdatedBy")
+  deletedParts     BlockPart[]  @relation("partDeletedBy")
+  createdStrings   StringType[] @relation("stringCreatedBy")
+  updatedStrings   StringType[] @relation("stringUpdatedBy")
+  deletedStrings   StringType[] @relation("stringDeletedBy")
+  createdCommands  StringCommand[] @relation("commandCreatedBy")
+  updatedCommands  StringCommand[] @relation("commandUpdatedBy")
+  deletedCommands  StringCommand[] @relation("commandDeletedBy")
+  createdStructs   Struct[]        @relation("structCreatedBy")
+  updatedStructs   Struct[]        @relation("structUpdatedBy")
+  deletedStructs   Struct[]        @relation("structDeletedBy")
+  createdTransforms BlockTransform[] @relation("transformCreatedBy")
+  updatedTransforms BlockTransform[] @relation("transformUpdatedBy")
+  deletedTransforms BlockTransform[] @relation("transformDeletedBy")
+  createdOverrides  Override[]      @relation("overrideCreatedBy")
+  updatedOverrides  Override[]      @relation("overrideUpdatedBy")
+  deletedOverrides  Override[]      @relation("overrideDeletedBy")
+  createdMnemonics GameMnemonic[]  @relation("mnemonicCreatedBy")
+  updatedMnemonics GameMnemonic[]  @relation("mnemonicUpdatedBy")
+  deletedMnemonics GameMnemonic[]  @relation("mnemonicDeletedBy")
+  createdRewrites   Rewrite[]       @relation("rewriteCreatedBy")
+  updatedRewrites   Rewrite[]       @relation("rewriteUpdatedBy")
+  deletedRewrites   Rewrite[]       @relation("rewriteDeletedBy")
+  deletedUsers      User[]          @relation("userDeletedBy")
+  updatedUsers      User[]          @relation("userUpdatedBy")
+
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+  deletedBy String? @db.Uuid
+  deletedByUser User? @relation(name: "userDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt DateTime @updatedAt
+  updatedBy String? @db.Uuid
+  updatedByUser User? @relation(name: "userUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@index([email])
+  @@index([name])
+}
+
+model ScribeProject {
+  id       String   @id @default(cuid())
+  name     String   @unique
+  isPublic Boolean  @default(false)
+  meta     Json?
+
+  gameRomId String?
+  
+  // Related data
+  cops      Cop[]
+  files     File[]
+  blocks    Block[]
+  strings   StringType[]
+  structs   Struct[]
+  labels    Label[]
+  rewrites  Rewrite[]
+  mnemonics GameMnemonic[]
+  overrides Override[]
+  lastActiveUsers User[]
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "projectCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "projectDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "projectUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@index([name])
+}
+
+model Cop {
+  id       String   @id @default(cuid())
+  code     Int
+  mnemonic String   // "00", "01", "02", etc.
+  parts    String[] @default([])
+  halt     Boolean  @default(false)
+  
+  // Owner
+  project   ScribeProject @relation(fields: [projectId], references: [id])
+  projectId String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "copCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "copDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "copUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, code])
+  @@unique([projectId, mnemonic])
+  @@index([projectId])
+}
+
+model Label {
+  id       String   @id @default(cuid())
+  location Int
+  label    String
+  
+  // Owner
+  project   ScribeProject @relation(fields: [projectId], references: [id])
+  projectId String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "labelCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "labelDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "labelUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, location])
+  @@index([projectId])
+}
+
+model Rewrite {
+  id       String   @id @default(cuid())
+  location Int
+  value    Int
+  
+  // Owner
+  project   ScribeProject @relation(fields: [projectId], references: [id])
+  projectId String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "rewriteCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "rewriteDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "rewriteUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, location])
+  @@index([projectId])
+}
+
+model GameMnemonic {
+  id          String   @id @default(cuid())
+  address     Int
+  mnemonic    String
+  meta        Json?
+  
+  // Owner
+  project ScribeProject @relation(fields: [projectId], references: [id])
+  projectId   String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "mnemonicCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "mnemonicDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "mnemonicUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, address])
+  @@unique([projectId, mnemonic])
+  @@index([projectId])
+}
+
+model Override {
+  id       String   @id @default(cuid())
+  location Int
+  register String  @default("A")
+  value    Int
+  
+  // Owner
+  project   ScribeProject @relation(fields: [projectId], references: [id])
+  projectId String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "overrideCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "overrideDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "overrideUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, location])
+  @@index([projectId])
+}
+
+model File {
+  id         String @id @default(cuid())
+  name       String
+  location   Int
+  size       Int
+  type       String
+  group      String?
+  scene      String?
+  compressed Boolean?
+  upper      Boolean?
+  meta       Json?
+  
+  // Owner
+  project   ScribeProject @relation(fields: [projectId], references: [id])
+  projectId String
+
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "fileCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "fileDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "fileUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model Block {
+  id          String  @id @default(cuid())
+  name        String
+  movable     Boolean @default(false)
+  group       String?
+  scene       String?
+  postProcess String?
+  meta        Json?
+
+  // Owner
+  project   ScribeProject @relation(fields: [projectId], references: [id])
+  projectId String
+  
+  // Relations
+  transforms BlockTransform[]
+  parts      BlockPart[]
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "blockCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "blockDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "blockUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model BlockTransform {
+  id          String   @id @default(cuid())
+  regex       String
+  replacement String
+  
+  // Owner
+  block   Block @relation(fields: [blockId], references: [id])
+  blockId String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "transformCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "transformDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "transformUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([blockId, regex])
+  @@index([blockId])
+}
+
+model BlockPart {
+  id       String @id @default(cuid())
+  name     String
+  location Int
+  size     Int
+  type     String
+  index    Int?
+  
+  // Owner
+  block   Block @relation(fields: [blockId], references: [id])
+  blockId String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "partCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "partDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "partUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([blockId, name])
+  @@index([blockId])
+}
+
+
+model StringType {
+  id           String @id @default(cuid())
+  name         String  // e.g., "ASCIIString", "WideString"
+  delimiter    String? // e.g., "|", "`", "~"
+  shiftType    String? // e.g., "wh2", "h2"
+  terminator   Int?
+  greedy       Boolean?
+  meta         Json?
+  characterMap String[] @default([])
+  
+  // Owner
+  project ScribeProject @relation(fields: [projectId], references: [id])
+  projectId   String
+
+  commands StringCommand[]
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "stringCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "stringDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "stringUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, name])
+  @@unique([projectId, delimiter])
+  @@index([projectId])
+}
+
+// Commands for StringType
+model StringCommand {
+  id        String  @id @default(cuid())
+  code      Int     // Command key/code
+  mnemonic  String  // Command name/mnemonic
+  types     String[] @default([])  // Array of parameter types
+  delimiter Int?      // Optional delimiter for ESC commands
+  halt      Boolean?  // Whether this command halts processing
+  parts     String[] @default([]) // Array of part names
+  meta      Json?
+  
+  // Owner
+  stringType   StringType @relation(fields: [stringTypeId], references: [id])
+  stringTypeId String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "commandCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "commandDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "commandUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@unique([stringTypeId, code])
+  @@unique([stringTypeId, mnemonic])
+  @@index([stringTypeId])
+}
+
+
+model Struct {
+  id            String @id @default(cuid())
+  name          String // e.g., "h_actor", "sprite_group"
+  types         String[] @default([]) // Array of type strings like ["Byte", "Word", "Address"]
+  delimiter     Int?  // Optional delimiter value
+  discriminator Int?  // Optional descriminator value  
+  parent        String? // Optional parent struct name
+  parts         String[] @default([])   // Optional array of part names
+  meta          Json?
+  
+  // Owner
+  project ScribeProject @relation(fields: [projectId], references: [id])
+  projectId   String
+
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "structCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "structDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "structUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@unique([projectId, name])
+  @@index([projectId])
+}
