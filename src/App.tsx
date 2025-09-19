@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuthStore } from './stores/auth-store'
 import LoginPage from './pages/LoginPage'
@@ -10,20 +10,30 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
   const { user } = useAuthStore()
-  const navigate = useNavigate()
 
-  // Handle GitHub Pages SPA redirect
+  // Handle GitHub Pages SPA redirect (rafgraph/spa-github-pages solution)
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const redirectPath = urlParams.get('redirect')
-
-    if (redirectPath) {
-      // Remove the redirect parameter from the URL and navigate to the intended path
-      const newUrl = window.location.origin + window.location.pathname + window.location.hash
-      window.history.replaceState({}, '', newUrl)
-      navigate(redirectPath, { replace: true })
-    }
-  }, [navigate])
+    // Single Page Apps for GitHub Pages
+    // MIT License
+    // https://github.com/rafgraph/spa-github-pages
+    // This script checks to see if a redirect is present in the query string,
+    // converts it back into the correct url and adds it to the
+    // browser's history using window.history.replaceState(...),
+    // which won't cause the browser to attempt to load the new url.
+    // When the single page app is loaded further down in this file,
+    // the correct url will be waiting in the browser's history for
+    // the single page app to route accordingly.
+    (function(l) {
+      if (l.search[1] === '/' ) {
+        var decoded = l.search.slice(1).split('&').map(function(s) {
+          return s.replace(/~and~/g, '&')
+        }).join('?');
+        window.history.replaceState(null, '',
+            l.pathname.slice(0, -1) + decoded + l.hash
+        );
+      }
+    }(window.location))
+  }, [])
 
   // Auth state management is handled in auth-store.ts
   // No need to duplicate it here
