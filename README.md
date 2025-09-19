@@ -1,5 +1,7 @@
 # Scribe - Collaborative Game Database Editor
 
+[![Deploy to GitHub Pages](https://github.com/Azarem/gaia-scribe/actions/workflows/deploy.yml/badge.svg)](https://github.com/Azarem/gaia-scribe/actions/workflows/deploy.yml)
+
 A modern, real-time collaborative editor for game database management, built with React 19, Supabase, and TypeScript.
 
 ## 🚀 Features
@@ -170,6 +172,19 @@ The project uses Prisma with PostgreSQL via Supabase. The schema includes compre
 - Project organization and collaboration
 - Game data structures (COPs, files, blocks, strings, etc.)
 - Audit trails for all operations
+
+## 🚀 Deployment
+
+The application is automatically deployed to GitHub Pages using GitHub Actions. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment configuration and troubleshooting.
+
+### Quick Deployment Setup
+1. Configure Repository Variables in GitHub:
+   - `SUPABASE_URL`: Your Supabase project URL
+   - `SUPABASE_ANON_KEY`: Your Supabase anonymous key
+2. Enable GitHub Pages in repository settings
+3. Push to `main` branch to trigger automatic deployment
+
+**Live Application**: [https://scribe.gaia.studio](https://scribe.gaia.studio)
 
 ## 🤝 Contributing
 
