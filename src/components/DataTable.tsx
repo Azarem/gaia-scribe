@@ -67,6 +67,14 @@ export default function DataTable<T extends { id: string }>({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Helper function to properly handle empty values while preserving zero
+  const formatCellValue = (value: any): string => {
+    if (value === null || value === undefined || value === '') {
+      return ''
+    }
+    return String(value)
+  }
+
   // Filter and sort data
   const processedData = useMemo(() => {
     let filtered = data
@@ -74,11 +82,11 @@ export default function DataTable<T extends { id: string }>({
     // Apply search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
-      filtered = data.filter(row => 
+      filtered = data.filter(row =>
         columns.some(col => {
           if (!col.filterable) return false
           const value = (row as any)[col.key]
-          return String(value || '').toLowerCase().includes(searchLower)
+          return formatCellValue(value).toLowerCase().includes(searchLower)
         })
       )
     }
@@ -218,7 +226,7 @@ export default function DataTable<T extends { id: string }>({
 
   const renderCell = (column: ColumnDefinition, row: T, isEditing: boolean) => {
     const value = (row as any)[column.key]
-    
+
     if (isEditing && column.editable) {
       return renderEditableCell(column, editingData, setEditingData, validationErrors)
     }
@@ -231,16 +239,21 @@ export default function DataTable<T extends { id: string }>({
       return value ? '✓' : '✗'
     }
 
-    return String(value || '')
+    return formatCellValue(value)
   }
 
   const renderEditableCell = (
-    column: ColumnDefinition, 
-    data: Partial<T>, 
+    column: ColumnDefinition,
+    data: Partial<T>,
     setData: (data: Partial<T>) => void,
     errors: Record<string, string>
   ) => {
-    let value = (data as any)[column.key] || ''
+    let value = (data as any)[column.key]
+
+    // Handle null/undefined values but preserve zero
+    if (value === null || value === undefined) {
+      value = ''
+    }
 
     // Handle array values for display
     if (Array.isArray(value)) {

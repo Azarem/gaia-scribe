@@ -8,6 +8,7 @@ import { getSectionByRoute } from '../lib/project-sections'
 import DataTable from '../components/DataTable'
 import FilesDataTable from '../components/FilesDataTable'
 import BlocksDataTable from '../components/BlocksDataTable'
+import StringTypesDataTable from '../components/StringTypesDataTable'
 import Breadcrumbs from '../components/Breadcrumbs'
 import {
   filesColumns,
@@ -356,6 +357,20 @@ export default function ProjectSectionPage() {
           <BlocksDataTable
             data={sectionData}
             projectId={id!}
+            columns={getColumnConfig() as any}
+            loading={sectionLoading}
+            error={sectionError}
+            onAdd={handleAdd}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onRefresh={handleRefresh}
+            searchPlaceholder={`Search ${sectionConfig.name.toLowerCase()}...`}
+            addButtonText={`Add ${sectionConfig.name.slice(0, -1)}`} // Remove 's' from plural
+            emptyMessage={`No ${sectionConfig.name.toLowerCase()} found. Click "Add ${sectionConfig.name.slice(0, -1)}" to create your first entry.`}
+          />
+        ) : section === 'strings' ? (
+          <StringTypesDataTable
+            data={sectionData}
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}

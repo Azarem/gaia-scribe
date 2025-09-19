@@ -259,6 +259,14 @@ export const copsColumns: ColumnDefinition<Cop>[] = [
 // String Types Section Configuration
 export const stringsColumns: ColumnDefinition<StringType>[] = [
   {
+    key: 'expand',
+    label: '',
+    sortable: false,
+    editable: false,
+    width: '40px',
+    render: () => null // Will be handled by StringTypesDataTable
+  },
+  {
     key: 'name',
     label: 'Name',
     sortable: true,
@@ -298,13 +306,6 @@ export const stringsColumns: ColumnDefinition<StringType>[] = [
     sortable: true,
     editable: true,
     type: 'boolean'
-  },
-  {
-    key: 'characterMap',
-    label: 'Character Map',
-    editable: true,
-    type: 'textarea',
-    render: (value) => Array.isArray(value) ? value.join(', ') : ''
   }
 ]
 
@@ -469,10 +470,12 @@ export const overridesColumns: ColumnDefinition<Override>[] = [
     key: 'location',
     label: 'Location',
     sortable: true,
+    filterable: true,
     editable: true,
     type: 'text',
     render: (value) => value !== null && value !== undefined ? `0x${value.toString(16).toUpperCase().padStart(4, '0')}` : '',
     validate: (value) => {
+      if (typeof value === 'number') return value < 0 ? 'Location must be non-negative' : null;
       if (!value || value.trim() === '') return 'Location is required'
       const hexValue = value.replace(/^0x/i, '')
       if (!/^[0-9A-Fa-f]+$/.test(hexValue)) return 'Must be a valid hexadecimal value'
@@ -485,6 +488,7 @@ export const overridesColumns: ColumnDefinition<Override>[] = [
     key: 'register',
     label: 'Register',
     sortable: true,
+    filterable: true,
     editable: true,
     type: 'select',
     options: [
@@ -505,6 +509,7 @@ export const overridesColumns: ColumnDefinition<Override>[] = [
     key: 'value',
     label: 'Value',
     sortable: true,
+    filterable: true,
     editable: true,
     type: 'number',
     validate: (value) => {
