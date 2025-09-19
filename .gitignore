@@ -123,4 +123,5 @@ build/
 ehthumbs.db
 Thumbs.db
 
-.playwright-mcp
+.playwright-mcp/
+playwright-report/

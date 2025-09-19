@@ -9,9 +9,10 @@ CREATE TABLE "User" (
     "lastActiveObjectId" TEXT,
     "lastActiveObjectType" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
@@ -28,7 +29,7 @@ CREATE TABLE "ScribeProject" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "ScribeProject_pkey" PRIMARY KEY ("id")
@@ -46,7 +47,7 @@ CREATE TABLE "Cop" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "Cop_pkey" PRIMARY KEY ("id")
@@ -62,7 +63,7 @@ CREATE TABLE "Label" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "Label_pkey" PRIMARY KEY ("id")
@@ -78,7 +79,7 @@ CREATE TABLE "Rewrite" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "Rewrite_pkey" PRIMARY KEY ("id")
@@ -95,7 +96,7 @@ CREATE TABLE "GameMnemonic" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "GameMnemonic_pkey" PRIMARY KEY ("id")
@@ -112,7 +113,7 @@ CREATE TABLE "Override" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "Override_pkey" PRIMARY KEY ("id")
@@ -135,7 +136,7 @@ CREATE TABLE "File" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "File_pkey" PRIMARY KEY ("id")
@@ -155,7 +156,7 @@ CREATE TABLE "Block" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "Block_pkey" PRIMARY KEY ("id")
@@ -171,7 +172,7 @@ CREATE TABLE "BlockTransform" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "BlockTransform_pkey" PRIMARY KEY ("id")
@@ -190,7 +191,7 @@ CREATE TABLE "BlockPart" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "BlockPart_pkey" PRIMARY KEY ("id")
@@ -211,7 +212,7 @@ CREATE TABLE "StringType" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "StringType_pkey" PRIMARY KEY ("id")
@@ -232,7 +233,7 @@ CREATE TABLE "StringCommand" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "StringCommand_pkey" PRIMARY KEY ("id")
@@ -253,7 +254,7 @@ CREATE TABLE "Struct" (
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "deletedBy" UUID,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
     CONSTRAINT "Struct_pkey" PRIMARY KEY ("id")
@@ -270,9 +271,6 @@ CREATE INDEX "User_email_idx" ON "User"("email");
 
 -- CreateIndex
 CREATE INDEX "User_name_idx" ON "User"("name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ScribeProject_name_key" ON "ScribeProject"("name");
 
 -- CreateIndex
 CREATE INDEX "ScribeProject_name_idx" ON "ScribeProject"("name");
@@ -363,6 +361,9 @@ CREATE UNIQUE INDEX "Struct_projectId_name_key" ON "Struct"("projectId", "name")
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_lastActiveProjectId_fkey" FOREIGN KEY ("lastActiveProjectId") REFERENCES "ScribeProject"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "User" ADD CONSTRAINT "User_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_deletedBy_fkey" FOREIGN KEY ("deletedBy") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -530,16 +531,15 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'supabase_vault') OR
      EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_auth_admin') THEN
     
-    GRANT USAGE ON SCHEMA public TO anon;
+    GRANT USAGE ON SCHEMA public TO anon, authenticated;
     
     -- Grant SELECT access to anon and authenticated on all tables
     GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
     GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
     
-    -- Explicit grants for critical tables to ensure anon access
-    GRANT SELECT ON "ScribeProject" TO anon;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON "ScribeProject" TO authenticated;
+    -- CRITICAL: Grant permissions for User table to authenticated users
+    GRANT SELECT, INSERT, UPDATE, DELETE ON "User" TO authenticated;
     
     -- Enable Row Level Security on all tables
     ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
@@ -566,22 +566,22 @@ BEGIN
     ON "User"
     FOR SELECT
     TO authenticated
-    USING ((SELECT auth.uid()) = id);
+    USING (auth.uid() = id);
     
     -- Users can update their own profile
     CREATE POLICY "Users can update their own profile"
     ON "User"
     FOR UPDATE
     TO authenticated
-    USING ((SELECT auth.uid()) = id)
-    WITH CHECK ((SELECT auth.uid()) = id);
+    USING (auth.uid() = id)
+    WITH CHECK (auth.uid() = id);
     
     -- Users can create their own profile (CRITICAL for initial signup)
     CREATE POLICY "Users can create their own profile"
     ON "User"
     FOR INSERT
     TO authenticated
-    WITH CHECK ((SELECT auth.uid()) = id);
+    WITH CHECK (auth.uid() = id);
     
     -- ====================================
     -- SCRIBE PROJECT POLICIES
@@ -606,29 +606,29 @@ BEGIN
     ON "ScribeProject"
     FOR SELECT
     TO authenticated
-    USING ((SELECT auth.uid()) = "createdBy");
+    USING (auth.uid() = "createdBy");
     
     -- Authenticated users can create projects
     CREATE POLICY "Users can create projects"
     ON "ScribeProject"
     FOR INSERT
     TO authenticated
-    WITH CHECK ((SELECT auth.uid()) = "createdBy");
+    WITH CHECK (auth.uid() = "createdBy");
     
     -- Authenticated users can update their own projects
     CREATE POLICY "Users can update their own projects"
     ON "ScribeProject"
     FOR UPDATE
     TO authenticated
-    USING ((SELECT auth.uid()) = "createdBy")
-    WITH CHECK ((SELECT auth.uid()) = "createdBy");
+    USING (auth.uid() = "createdBy")
+    WITH CHECK (auth.uid() = "createdBy");
     
     -- Authenticated users can delete their own projects
     CREATE POLICY "Users can delete their own projects"
     ON "ScribeProject"
     FOR DELETE
     TO authenticated
-    USING ((SELECT auth.uid()) = "createdBy");
+    USING (auth.uid() = "createdBy");
     
     -- ====================================
     -- COP TABLE POLICIES
@@ -652,7 +652,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     -- Authenticated users can modify cops in their own projects
@@ -662,11 +662,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -691,7 +691,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify labels in their projects"
@@ -700,11 +700,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -727,7 +727,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify rewrites in their projects"
@@ -736,11 +736,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -763,7 +763,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify mnemonics in their projects"
@@ -772,11 +772,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -799,7 +799,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify overrides in their projects"
@@ -808,11 +808,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -835,7 +835,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify files in their projects"
@@ -844,11 +844,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -871,7 +871,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify blocks in their projects"
@@ -880,11 +880,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -909,7 +909,7 @@ BEGIN
         SELECT 1 FROM "Block" b
         JOIN "ScribeProject" sp ON b."projectId" = sp.id
         WHERE b.id = "blockId" 
-        AND (sp."isPublic" = true OR sp."createdBy" = (SELECT auth.uid()))
+        AND (sp."isPublic" = true OR sp."createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify block transforms in their projects"
@@ -919,12 +919,12 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "Block" b
         JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = (SELECT auth.uid())
+        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "Block" b
         JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = (SELECT auth.uid())
+        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -949,7 +949,7 @@ BEGIN
         SELECT 1 FROM "Block" b
         JOIN "ScribeProject" sp ON b."projectId" = sp.id
         WHERE b.id = "blockId" 
-        AND (sp."isPublic" = true OR sp."createdBy" = (SELECT auth.uid()))
+        AND (sp."isPublic" = true OR sp."createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify block parts in their projects"
@@ -959,12 +959,12 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "Block" b
         JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = (SELECT auth.uid())
+        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "Block" b
         JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = (SELECT auth.uid())
+        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -987,7 +987,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify string types in their projects"
@@ -996,11 +996,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -1025,7 +1025,7 @@ BEGIN
         SELECT 1 FROM "StringType" st
         JOIN "ScribeProject" sp ON st."projectId" = sp.id
         WHERE st.id = "stringTypeId" 
-        AND (sp."isPublic" = true OR sp."createdBy" = (SELECT auth.uid()))
+        AND (sp."isPublic" = true OR sp."createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify string commands in their projects"
@@ -1035,12 +1035,12 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "StringType" st
         JOIN "ScribeProject" sp ON st."projectId" = sp.id
-        WHERE st.id = "stringTypeId" AND sp."createdBy" = (SELECT auth.uid())
+        WHERE st.id = "stringTypeId" AND sp."createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "StringType" st
         JOIN "ScribeProject" sp ON st."projectId" = sp.id
-        WHERE st.id = "stringTypeId" AND sp."createdBy" = (SELECT auth.uid())
+        WHERE st.id = "stringTypeId" AND sp."createdBy" = auth.uid()
     ));
     
     -- ====================================
@@ -1063,7 +1063,7 @@ BEGIN
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
         WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
+        AND ("isPublic" = true OR "createdBy" = auth.uid())
     ));
     
     CREATE POLICY "Users can modify structs in their projects"
@@ -1072,11 +1072,11 @@ BEGIN
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = (SELECT auth.uid())
+        WHERE id = "projectId" AND "createdBy" = auth.uid()
     ));
     
     -- ====================================

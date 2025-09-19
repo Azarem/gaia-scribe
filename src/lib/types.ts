@@ -19,8 +19,21 @@ export type {
   Prisma,
 } from '@prisma/client'
 
+// Re-export shared types from @gaialabs/shared package
+// These provide standardized interfaces for project data structures
+export type {
+  ProjectData,
+  ProjectBranchData,
+  ProjectFileData,
+  ProjectPayload,
+  BaseRomData,
+  BaseRomBranchData,
+  BaseRomFileData,
+  BaseRomPayload,
+} from '@gaialabs/shared'
+
 // Useful type combinations for common operations
-export type { 
+export type {
   Prisma as PrismaTypes,
 } from '@prisma/client'
 

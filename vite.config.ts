@@ -13,17 +13,27 @@ export default defineConfig({
   },
   server: {
     port: 3001,
-    host: true,
+    host: 'localhost',
+    // Restore normal HMR functionality now that Supabase connectivity is fixed
+    hmr: {
+      port: 3001,
+      protocol: 'ws',
+      host: 'localhost',
+    },
+    // Add file watching optimization to reduce HMR triggers
+    watch: {
+      ignored: ['**/node_modules/**', '**/dist/**', '**/test-results/**', '**/playwright-report/**'],
+    },
   },
   build: {
     outDir: 'dist',
     sourcemap: true,
   },
   optimizeDeps: {
+    exclude: ['@supabase/realtime-js'],
     include: [
       '@supabase/supabase-js',
       '@supabase/postgrest-js',
-      '@supabase/realtime-js',
       '@supabase/auth-js'
     ],
   },

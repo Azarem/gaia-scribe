@@ -25,6 +25,34 @@
 - **No data transforms** - raw database objects with Prisma typing
 
 ### **Key Patterns**
+
+#### **Data Transformation Policy**
+**NEVER transform or reshape data structures in the application layer.** Always use standardized classes and interfaces from `@gaialabs/shared` directly.
+
+```typescript
+// ❌ WRONG - Do not transform data in application layer
+const transformedData = data.map(item => ({
+  ...item,
+  customField: item.someField
+}))
+
+// ✅ CORRECT - Use shared types directly, fix the query instead
+const { data, error } = await supabase
+  .from('ProjectBranch')
+  .select(`*, project:Project!inner(id,name,meta,gameId,baseRomId,createdAt,updatedAt)`)
+  .order('updatedAt', { ascending: false })
+
+// ✅ CORRECT - Import and use shared types as-is
+import type { ProjectData, ProjectBranchData } from '@gaialabs/shared'
+const projectBranch: ProjectBranchData = data[0] // Use directly, no transformation
+```
+
+**Benefits:**
+- **Type consistency** across the entire application ecosystem
+- **No data corruption** from unnecessary transformations
+- **Maintainability** by having a single source of truth for data structures
+- **Compatibility** with external APIs and services
+
 ```typescript
 // ✅ Correct data access pattern
 const { data, error } = await supabase
@@ -43,6 +71,155 @@ const channel = supabase
     const newProject = payload.new as ScribeProject // Prisma types
     // Handle update
   })
+```
+
+## 🔐 Authentication & JWT Token Handling
+
+### **JWT Token Requirements**
+Supabase JWT tokens use **base64url encoding** (RFC 4648 Section 5), not standard base64. This is critical for proper token handling:
+
+- **base64url differences**: Uses `-` instead of `+`, `_` instead of `/`, no padding (`=`)
+- **Platform dependency**: `atob()` is browser-specific and fails with base64url encoding
+- **Universal decoding**: Use `src/lib/jwt-utils.ts` for cross-platform JWT decoding
+
+### **Base64url Decoding Implementation**
+```typescript
+// ❌ NEVER use atob() for JWT tokens - platform dependent and fails
+const payload = JSON.parse(atob(tokenParts[1])) // BREAKS
+
+// ✅ Use jwt-utils.ts for proper base64url decoding
+import { decodeJWT, validateJWT, extractUserFromJWT } from '../lib/jwt-utils'
+
+const { header, payload } = decodeJWT(session.access_token)
+const userInfo = extractUserFromJWT(session.access_token)
+const validation = validateJWT(session.access_token)
+```
+
+### **Authentication Flow**
+1. **GitHub OAuth**: Users sign in via `supabase.auth.signInWithOAuth({ provider: 'github' })`
+2. **JWT Generation**: Supabase generates base64url-encoded JWT tokens
+3. **Token Storage**: Tokens stored in localStorage as `sb-{project-ref}-auth-token`
+4. **Database Authentication**: JWT tokens passed via Authorization header for RLS validation
+5. **User Sync**: Authenticated users create their own User table records via RLS policies
+
+### **Auth State Change Handler Pattern**
+The auth state change listener uses a `setTimeout` wrapper to prevent race conditions:
+
+```typescript
+// ✅ Correct pattern - setTimeout prevents race conditions
+supabase.auth.onAuthStateChange((event, session) => {
+  setTimeout(async () => {
+    // Handle auth state changes here
+    // This prevents race conditions with Supabase's internal state management
+  }, 0)
+})
+
+// ❌ Incorrect - direct async handler can cause race conditions
+supabase.auth.onAuthStateChange(async (event, session) => {
+  // This can cause issues with Supabase's auth state synchronization
+})
+```
+
+**Why setTimeout is required:**
+- Prevents race conditions with Supabase's internal auth state management
+- Ensures proper order of operations during auth state transitions
+- Allows Supabase to complete its internal state updates before our handlers run
+
+### **RLS Policy Configuration**
+Required setup for User table authentication:
+
+```sql
+-- Grant table-level permissions to authenticated users
+GRANT SELECT, INSERT, UPDATE, DELETE ON "User" TO authenticated;
+
+-- RLS policies for user-specific data access
+CREATE POLICY "Users can view their own profile" ON "User"
+  FOR SELECT USING ((SELECT auth.uid()) = id);
+
+CREATE POLICY "Users can create their own profile" ON "User"
+  FOR INSERT WITH CHECK ((SELECT auth.uid()) = id);
+
+CREATE POLICY "Users can update their own profile" ON "User"
+  FOR UPDATE USING ((SELECT auth.uid()) = id);
+```
+
+### **Working Client Pattern**
+For authenticated database operations, use the working client pattern:
+
+```typescript
+// Create client with proper JWT authentication
+export const createWorkingClient = () => {
+  const authKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
+  const authData = localStorage.getItem(authKey)
+  const session = authData ? JSON.parse(authData) : null
+
+  if (session?.access_token) {
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      },
+    })
+  }
+  return createClient(supabaseUrl, supabaseAnonKey)
+}
+```
+
+### **External Project Repository**
+For project import functionality, the application connects to a separate public Supabase instance:
+
+```typescript
+// External API for project imports (separate from main application database)
+const EXTERNAL_SUPABASE_URL = 'https://adwobxutnpmjbmhdxrzx.supabase.co'
+const EXTERNAL_SUPABASE_KEY = 'sb_publishable_uBZdKmgGql5sDNGpj1DVMQ_opZ2V4kV'
+
+// Uses direct HTTP fetch to avoid authentication conflicts
+const response = await fetch(`${EXTERNAL_SUPABASE_URL}/rest/v1/ProjectBranch`, {
+  headers: {
+    'apikey': EXTERNAL_SUPABASE_KEY,
+    'Authorization': `Bearer ${EXTERNAL_SUPABASE_KEY}`,
+  }
+})
+```
+
+**Key Points:**
+- **Separate data source**: Different Supabase instance from main application
+- **Public read-only access**: These keys are intentionally public for project browsing
+- **HTTP-only**: Uses fetch() instead of Supabase client to maintain separation
+- **Import functionality**: Enables users to browse and import projects from public repository
+
+### **Security Best Practices**
+
+#### **JWT Token Security**
+- ✅ **Never log JWT tokens**: Tokens contain sensitive authentication data
+- ✅ **Use secure storage**: localStorage is acceptable for client-side apps with proper domain isolation
+- ✅ **Validate token expiry**: Check `exp` claim before using tokens
+- ✅ **Handle token refresh**: Implement proper token refresh logic
+
+#### **Environment Variables**
+- ✅ **No hardcoded secrets**: Main application API keys and secrets must be in environment variables
+- ✅ **Separate environments**: Use different keys for development, staging, and production
+- ✅ **Public vs Private keys**: Only use public/anon keys in client-side code
+- ✅ **External API exception**: External project repository uses public read-only keys for import functionality
+
+#### **RLS Policy Security**
+- ✅ **User isolation**: Policies must use `(SELECT auth.uid()) = user_id` pattern
+- ✅ **Principle of least privilege**: Grant only necessary permissions
+- ✅ **Test policies**: Verify users can only access their own data
+
+#### **Client-Side Security**
+```typescript
+// ✅ Safe logging - no sensitive data
+console.log('User signed in:', { userId: user.id, email: user.email })
+
+// ❌ Dangerous logging - exposes tokens
+console.log('Session:', session) // Contains access_token
+
+// ✅ Safe error handling
+catch (error) {
+  console.error('Auth error:', error.message) // Don't log full error object
+}
 ```
 
 ## 🛠️ Technology Stack & Documentation
@@ -110,6 +287,96 @@ useEffect(() => {
 }, [])
 ```
 
+### **⚠️ CRITICAL: Supabase Client Hanging Bug Workaround**
+
+**Problem:** The Supabase JavaScript client library has a critical bug where client instances can hang indefinitely after page refresh in certain browser environments during import/sync operations.
+
+**Root Cause:** Race conditions in auth state change listeners and session restoration (GitHub issue: https://github.com/supabase/auth-js/issues/768)
+
+**Solution:**
+- **Use Supabase client for normal operations** (queries, realtime, auth) - RLS policies are applied correctly
+- **Use direct HTTP requests ONLY for import/sync processes** where hanging occurs
+
+```typescript
+// ✅ NORMAL OPERATIONS: Use Supabase client (RLS policies work correctly)
+export const db = {
+  projects: {
+    async getByUser(userId: string) {
+      return supabase
+        .from('ScribeProject')
+        .select('*')
+        .eq('createdBy', userId)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+    }
+  }
+}
+
+// ✅ IMPORT/SYNC OPERATIONS: Use direct HTTP requests if hanging occurs
+export const importUtils = {
+  async syncUserFromAuth(authUser: any) {
+    // Only use HTTP requests for import processes that hang
+    const authKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
+    const authData = localStorage.getItem(authKey)
+    let accessToken = null
+
+    if (authData) {
+      const session = JSON.parse(authData)
+      accessToken = session.access_token
+    }
+
+    const headers = {
+      'apikey': supabaseAnonKey,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...(accessToken && { 'Authorization': `Bearer ${accessToken}` })
+    }
+
+    // Use HTTP for import operations that may hang
+    const url = `${supabaseUrl}/rest/v1/User`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'Prefer': 'return=representation' },
+      body: JSON.stringify(userData)
+    })
+
+    return response.json()
+  }
+}
+```
+
+**Auth State Management Fix:**
+```typescript
+// ✅ Proper auth state change listener to prevent race conditions
+let authSubscription: any = null
+
+const setupAuthListener = () => {
+  if (authSubscription) {
+    authSubscription.unsubscribe()
+  }
+
+  authSubscription = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Handle auth state changes without calling getSession()
+    const { setSession, setInitialized } = useAuthStore.getState()
+    setSession(session)
+    setInitialized(true)
+  })
+}
+
+// ❌ NEVER call getSession() directly - causes hanging
+// const { data: { session } } = await supabase.auth.getSession() // HANGS!
+
+// ✅ Let onAuthStateChange handle session restoration
+const initializeAuth = () => {
+  // Don't call getSession() - rely on auth state change listener
+  setTimeout(() => {
+    if (!useAuthStore.getState().initialized) {
+      useAuthStore.getState().setInitialized(true)
+    }
+  }, 2000)
+}
+```
+
 ### **Prisma - Type Generation**
 **Context7 Documentation Patterns:**
 - **Code Generation**: `prisma generate` creates TypeScript types
@@ -119,9 +386,31 @@ useEffect(() => {
 ```typescript
 // ✅ Correct usage - Types only
 import type { ScribeProject, User } from '@prisma/client'
+import type { ProjectData, ProjectBranchData } from '@gaialabs/shared'
 
 type ProjectWithCreator = ScribeProject & {
   createdByUser: Pick<User, 'id' | 'name' | 'email'>
+}
+
+// ✅ Use shared types directly - NO transformation layers
+const projectData: ProjectData = apiResponse // Use as-is
+const projectBranch: ProjectBranchData = branchResponse // Use as-is
+
+// ❌ WRONG - Don't create transformation wrappers
+// const transformProjectData = (raw: any): ProjectData => ({ ...raw, customField: raw.field })
+```
+
+#### **Shared Package Integration**
+Always prefer `@gaialabs/shared` types for external data structures:
+
+```typescript
+// ✅ CORRECT - Direct usage of shared types
+import { ProjectData, ProjectBranchData, fromSupabaseByProject } from '@gaialabs/shared'
+
+async function loadExternalProject(name: string): Promise<ProjectBranchData> {
+  // Use shared package functions directly
+  const payload = await fromSupabaseByProject(name)
+  return payload.projectBranch // Already correctly typed, no transformation needed
 }
 
 // ❌ Never use Prisma Client directly 
@@ -406,7 +695,29 @@ export const db = {
         createdByUser:User!inner(id, name, email)
       `)
     },
-    
+
+    async getByName(name: string) {
+      return supabase.from('ScribeProject')
+        .select('*')
+        .ilike('name', `%${name.trim()}%`)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+    },
+
+    async getByUserWithNameFilter(userId: string, nameFilter?: string) {
+      let query = supabase.from('ScribeProject')
+        .select('*')
+        .eq('createdBy', userId)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+
+      if (nameFilter?.trim()) {
+        query = query.ilike('name', `%${nameFilter.trim()}%`)
+      }
+
+      return query
+    },
+
     async create(project: CreateProject, userId: string) {
       return supabase.from('ScribeProject').insert({
         ...project,
@@ -496,12 +807,13 @@ npm run lint              # ESLint validation
 
 ## 🌟 Key Success Principles
 
-1. **Type Safety First** - Always use Prisma-generated types
+1. **Type Safety First** - Always use Prisma-generated types and `@gaialabs/shared` interfaces
 2. **Direct API Usage** - No service abstraction layers
-3. **Real-time by Default** - Every data interaction should support live updates
-4. **Audit Everything** - All changes tracked with user attribution
-5. **Progressive Enhancement** - Use React 19 features for better UX
-6. **Collaborative-First** - Design for multiple simultaneous users
+3. **No Data Transformation** - Use shared package types as-is, fix queries instead of reshaping data
+4. **Real-time by Default** - Every data interaction should support live updates
+5. **Audit Everything** - All changes tracked with user attribution
+6. **Progressive Enhancement** - Use React 19 features for better UX
+7. **Collaborative-First** - Design for multiple simultaneous users
 
 ---
 

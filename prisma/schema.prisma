@@ -62,14 +62,17 @@ model User {
   createdRewrites   Rewrite[]       @relation("rewriteCreatedBy")
   updatedRewrites   Rewrite[]       @relation("rewriteUpdatedBy")
   deletedRewrites   Rewrite[]       @relation("rewriteDeletedBy")
+  createdUsers      User[]          @relation("userCreatedBy")
   deletedUsers      User[]          @relation("userDeletedBy")
   updatedUsers      User[]          @relation("userUpdatedBy")
 
   createdAt DateTime @default(now())
+  createdBy String @db.Uuid
+  createdByUser User? @relation(name: "userCreatedBy", fields: [createdBy], references: [id])
   deletedAt DateTime?
   deletedBy String? @db.Uuid
   deletedByUser User? @relation(name: "userDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime? @updatedAt
   updatedBy String? @db.Uuid
   updatedByUser User? @relation(name: "userUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -79,7 +82,7 @@ model User {
 
 model ScribeProject {
   id       String   @id @default(cuid())
-  name     String   @unique
+  name     String
   isPublic Boolean  @default(false)
   meta     Json?
 
@@ -104,7 +107,7 @@ model ScribeProject {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "projectDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "projectUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -129,7 +132,7 @@ model Cop {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "copDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "copUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -154,7 +157,7 @@ model Label {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "labelDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "labelUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -178,7 +181,7 @@ model Rewrite {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "rewriteDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "rewriteUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -203,7 +206,7 @@ model GameMnemonic {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "mnemonicDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "mnemonicUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -229,7 +232,7 @@ model Override {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "overrideDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "overrideUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -260,7 +263,7 @@ model File {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "fileDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "fileUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -292,7 +295,7 @@ model Block {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "blockDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "blockUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -316,7 +319,7 @@ model BlockTransform {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "transformDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "transformUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -343,7 +346,7 @@ model BlockPart {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "partDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "partUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -375,7 +378,7 @@ model StringType {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "stringDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "stringUpdatedBy", fields: [updatedBy], references: [id])
 
@@ -406,7 +409,7 @@ model StringCommand {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "commandDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "commandUpdatedBy", fields: [updatedBy], references: [id])
   
@@ -437,7 +440,7 @@ model Struct {
   deletedAt     DateTime?
   deletedBy     String? @db.Uuid
   deletedByUser User? @relation(name: "structDeletedBy", fields: [deletedBy], references: [id])
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime? @updatedAt
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "structUpdatedBy", fields: [updatedBy], references: [id])
   
