@@ -28,9 +28,16 @@ function App() {
         const decoded = l.search.slice(1).split('&').map(function(s) {
           return s.replace(/~and~/g, '&')
         }).join('?');
-        window.history.replaceState(null, '',
-            l.pathname.slice(0, -1) + decoded + l.hash
-        );
+
+        console.log('SPA Redirect: Processing redirect from', l.href)
+        console.log('SPA Redirect: Decoded path:', decoded)
+        console.log('SPA Redirect: Hash fragment:', l.hash)
+
+        // Preserve the hash fragment for auth callbacks
+        const newUrl = l.pathname.slice(0, -1) + decoded + l.hash
+        console.log('SPA Redirect: New URL:', newUrl)
+
+        window.history.replaceState(null, '', newUrl);
       }
     }(window.location))
   }, [])
