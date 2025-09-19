@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase, db, clearWorkingClientCache, isSupabaseConfigured } from '../lib/supabase'
+import { supabase, db, clearWorkingClientCache } from '../lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 
 interface AuthState {
@@ -55,23 +55,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // FIXED: Initialize auth with corruption detection and recovery
 // Based on: https://github.com/supabase/auth-js/issues/768
 const initializeAuth = async () => {
-  console.log('Initializing auth - checking configuration and browser context...')
-
-  // Check if Supabase is configured
-  if (!isSupabaseConfigured()) {
-    console.warn('Supabase is not configured - skipping auth initialization')
-    const { setInitialized, setLoading, setSession } = useAuthStore.getState()
-    setInitialized(true)
-    setLoading(false)
-    setSession(null)
-    return
-  }
+  console.log('Initializing auth - checking for browser context corruption...')
 
   // Check if this is a page refresh with potential corruption
   const isPageRefresh = (performance as any).navigation?.type === 1 ||
                        (performance.getEntriesByType('navigation')[0] as any)?.type === 'reload'
 
-  if (isPageRefresh && supabase) {
+  if (isPageRefresh) {
     console.log('Page refresh detected - checking for Supabase corruption...')
 
     // Test if Supabase is corrupted by trying a simple operation with timeout
