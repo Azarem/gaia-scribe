@@ -8,13 +8,21 @@ import type {
 const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL as string
 const supabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY as string
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+// Check for missing environment variables but don't throw immediately
+const hasValidConfig = !!(supabaseUrl && supabaseAnonKey)
+
+if (!hasValidConfig) {
+  console.error('Missing Supabase environment variables:', {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseAnonKey,
+    url: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : 'undefined',
+    keyLength: supabaseAnonKey?.length || 0
+  })
 }
 
-// FIXED: Standard Supabase client configuration
+// FIXED: Standard Supabase client configuration with graceful fallback
 // The hanging issue was caused by race conditions in auth state change listeners, not client config
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = hasValidConfig ? createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -25,11 +33,25 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       eventsPerSecond: 10,
     },
   },
-})
+}) : null
+
+// Helper to check if Supabase is configured
+export const isSupabaseConfigured = () => hasValidConfig
+
+// Helper to get configured supabase client or throw error
+const getSupabaseClient = () => {
+  if (!supabase) {
+    throw new Error('Supabase is not configured. Please check environment variables.')
+  }
+  return supabase
+}
 
 // Create a fresh Supabase client instance for database operations
 // This works around the hanging bug by creating clean client instances
 export const createFreshSupabaseClient = () => {
+  if (!hasValidConfig) {
+    throw new Error('Cannot create Supabase client: missing configuration')
+  }
   console.log('Creating fresh Supabase client...')
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -119,7 +141,8 @@ const EXTERNAL_SUPABASE_KEY = 'sb_publishable_uBZdKmgGql5sDNGpj1DVMQ_opZ2V4kV'
 export const signInWithEmail = async (email: string, password: string) => {
   try {
     console.log('Attempting email sign-in for:', email)
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const client = getSupabaseClient()
+    const { data, error } = await client.auth.signInWithPassword({
       email,
       password,
     })
@@ -140,7 +163,8 @@ export const signInWithEmail = async (email: string, password: string) => {
 export const signInWithGitHub = async () => {
   try {
     console.log('Attempting GitHub sign-in')
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const client = getSupabaseClient()
+    const { data, error } = await client.auth.signInWithOAuth({
       provider: 'github',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
@@ -165,7 +189,8 @@ export const signInWithGitHub = async () => {
 export const signOut = async () => {
   try {
     console.log('Attempting sign-out')
-    const { error } = await supabase.auth.signOut()
+    const client = getSupabaseClient()
+    const { error } = await client.auth.signOut()
     
     if (error) {
       console.error('Sign-out error:', error.message)

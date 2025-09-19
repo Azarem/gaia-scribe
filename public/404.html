@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script>
+        // GitHub Pages SPA redirect handler
+        // This script redirects all 404s to index.html while preserving the hash fragment
+        // which is essential for Supabase auth callbacks that contain tokens in the hash
+        
+        // Get the current path and hash
+        const path = window.location.pathname;
+        const hash = window.location.hash;
+        const search = window.location.search;
+        
+        // Redirect to index.html with the original path preserved
+        // The hash fragment will be automatically preserved by the browser
+        const redirectUrl = window.location.origin + '/' + 
+            '?redirect=' + encodeURIComponent(path + search) + hash;
+        
+        // Perform immediate redirect
+        window.location.replace(redirectUrl);
+    </script>
+</head>
+<body>
+    <!-- This page should never be visible as the redirect happens immediately -->
+    <p>Redirecting...</p>
+</body>
+</html>
