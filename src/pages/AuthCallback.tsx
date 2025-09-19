@@ -11,9 +11,12 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        console.log('AuthCallback: Processing OAuth callback...')
+        console.log('=== AuthCallback: Starting OAuth callback processing ===')
         console.log('Current URL:', window.location.href)
+        console.log('Pathname:', window.location.pathname)
+        console.log('Search:', window.location.search)
         console.log('Hash fragment:', window.location.hash)
+        console.log('Current auth state - user:', user, 'session:', !!session)
 
         // Check if we have auth tokens in the URL hash
         const hashParams = new URLSearchParams(window.location.hash.substring(1))
