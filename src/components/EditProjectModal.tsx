@@ -54,7 +54,7 @@ export default function EditProjectModal({
         project.id,
         {
           name: trimmedName,
-          isPublic: isPublic
+          isPublic
         },
         user.id
       )

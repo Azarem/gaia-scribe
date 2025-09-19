@@ -21,7 +21,7 @@ export default function SupabaseDiagnostics() {
         supabaseUrl: import.meta.env.VITE_PUBLIC_SUPABASE_URL,
         hasAnonKey: !!import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY,
         anonKeyLength: import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY?.length || 0,
-        anonKeyPrefix: import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...',
+        anonKeyPrefix: `${import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20)  }...`,
       },
       authStore: {
         hasUser: !!user,

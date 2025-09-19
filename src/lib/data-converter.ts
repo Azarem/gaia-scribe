@@ -213,7 +213,7 @@ function extractCops(coplib: any): Omit<Cop, 'id' | 'projectId' | 'createdAt' | 
 
     cops.push({
       code: copData.code || 0,
-      mnemonic: mnemonic,
+      mnemonic,
       parts: copData.parts || [],
       halt: copData.halt || false,
       createdBy: '', // Will be set by caller
@@ -382,8 +382,8 @@ function extractMnemonics(fixups: any): Omit<GameMnemonic, 'id' | 'projectId' | 
     if (typeof address !== 'number') return
 
     mnemonicRecords.push({
-      address: address,
-      mnemonic: mnemonic,
+      address,
+      mnemonic,
       meta: null,
       createdBy: '', // Will be set by caller
       updatedBy: null,

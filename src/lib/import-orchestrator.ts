@@ -364,7 +364,7 @@ export class ImportOrchestrator {
               id: createId(),
               regex: transform.regex,
               replacement: transform.replacement,
-              blockId: blockId,
+              blockId,
               createdBy: userId
             }
           })
@@ -398,7 +398,7 @@ export class ImportOrchestrator {
               size: part.size,
               type: part.type,
               index: part.index,
-              blockId: blockId,
+              blockId,
               createdBy: userId
             }
           })
@@ -563,7 +563,7 @@ export class ImportOrchestrator {
               halt: command.halt,
               parts: command.parts || [],
               meta: command.meta,
-              stringTypeId: stringTypeId,
+              stringTypeId,
               createdBy: userId
             }
           })
