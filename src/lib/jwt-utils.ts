@@ -37,7 +37,7 @@ function base64urlDecode(str: string): string {
     // Manual base64 decoding as last resort
     return manualBase64Decode(base64)
   } catch (error) {
-    throw new Error(`Failed to decode base64url string: ${error.message}`)
+    throw new Error(`Failed to decode base64url string: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -112,7 +112,7 @@ export function decodeJWT(token: string): {
       }
     }
   } catch (error) {
-    throw new Error(`Failed to decode JWT token: ${error.message}`)
+    throw new Error(`Failed to decode JWT token: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -187,7 +187,7 @@ export function validateJWT(token: string): {
       claims: { header, payload }
     }
   } catch (error) {
-    errors.push(`Failed to decode token: ${error.message}`)
+    errors.push(`Failed to decode token: ${error instanceof Error ? error.message : String(error)}`)
     return {
       valid: false,
       errors

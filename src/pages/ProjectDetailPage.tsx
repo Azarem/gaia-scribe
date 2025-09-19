@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth-store'
 import { db } from '../lib/supabase'
-import { Calendar, Eye, Users, Edit, Trash2, ArrowLeft, Globe, Lock } from 'lucide-react'
+import { Calendar, Edit, Trash2, ArrowLeft, Globe, Lock } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 import EditProjectModal from '../components/EditProjectModal'
 import DeleteProjectModal from '../components/DeleteProjectModal'
@@ -240,7 +240,7 @@ export default function ProjectDetailPage() {
               <div>
                 <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {new Date(project.updatedAt).toLocaleString()}
+                  {project.updatedAt ? new Date(project.updatedAt).toLocaleString() : 'Never'}
                 </dd>
               </div>
             </div>

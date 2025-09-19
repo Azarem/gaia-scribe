@@ -231,7 +231,7 @@ export default function SupabaseDiagnostics() {
       )
 
       const response = await Promise.race([fetchPromise, timeoutPromise]) as Response
-      const data = await response.json()
+      await response.json() // Just validate response is JSON
 
       tests.networkConnectivity = {
         success: response.ok,

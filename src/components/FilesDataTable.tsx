@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import DataTable, { type DataTableProps, type ColumnDefinition } from './DataTable'
+import DataTable, { type DataTableProps } from './DataTable'
 import type { File } from '@prisma/client'
 
 interface FilesDataTableProps extends Omit<DataTableProps<File>, 'data'> {

@@ -65,7 +65,7 @@ export const filesColumns: ColumnDefinition<File>[] = [
     label: 'END',
     sortable: false,
     editable: false,
-    render: (value, row) => {
+    render: (_value, row) => {
       const location = row.location
       const size = row.size
       if (location !== null && location !== undefined && size !== null && size !== undefined) {

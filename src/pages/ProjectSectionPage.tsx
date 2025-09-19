@@ -341,7 +341,7 @@ export default function ProjectSectionPage() {
         {section === 'files' ? (
           <FilesDataTable
             data={sectionData}
-            columns={getColumnConfig()}
+            columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
             onAdd={handleAdd}
@@ -356,7 +356,7 @@ export default function ProjectSectionPage() {
           <BlocksDataTable
             data={sectionData}
             projectId={id!}
-            columns={getColumnConfig()}
+            columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
             onAdd={handleAdd}
@@ -370,7 +370,7 @@ export default function ProjectSectionPage() {
         ) : (
           <DataTable
             data={sectionData}
-            columns={getColumnConfig()}
+            columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
             onAdd={handleAdd}

@@ -2,10 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createId } from '@paralleldrive/cuid2'
 import type {
   ProjectBranchData,
-  ProjectPayload,
-  BaseRomPayload,
-  GameRomBranchData,
-  BaseRomBranchData
+  GameRomBranchData
 } from '@gaialabs/shared'
 
 const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL as string

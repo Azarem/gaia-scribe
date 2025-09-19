@@ -56,7 +56,10 @@ export async function importProject(
       // 1. Create the main ScribeProject record
       console.log('Creating ScribeProject record...')
       const project = await tx.scribeProject.create({
-        data: projectData.project
+        data: {
+          ...projectData.project,
+          meta: projectData.project.meta as any
+        }
       })
       
       console.log(`Created project: ${project.id} - ${project.name}`)
@@ -81,7 +84,8 @@ export async function importProject(
           tx.file.create({
             data: {
               ...file,
-              projectId: project.id
+              projectId: project.id,
+              meta: file.meta as any
             }
           })
         )
@@ -94,7 +98,8 @@ export async function importProject(
           tx.block.create({
             data: {
               ...block,
-              projectId: project.id
+              projectId: project.id,
+              meta: block.meta as any
             }
           })
         )
@@ -156,7 +161,8 @@ export async function importProject(
           tx.gameMnemonic.create({
             data: {
               ...mnemonic,
-              projectId: project.id
+              projectId: project.id,
+              meta: mnemonic.meta as any
             }
           })
         )
@@ -195,7 +201,8 @@ export async function importProject(
           tx.stringType.create({
             data: {
               ...stringType,
-              projectId: project.id
+              projectId: project.id,
+              meta: stringType.meta as any
             }
           })
         )
@@ -213,7 +220,8 @@ export async function importProject(
           return tx.stringCommand.create({
             data: {
               ...command,
-              stringTypeId
+              stringTypeId,
+              meta: command.meta as any
             }
           })
         }).filter(Boolean)
@@ -226,7 +234,8 @@ export async function importProject(
           tx.struct.create({
             data: {
               ...struct,
-              projectId: project.id
+              projectId: project.id,
+              meta: struct.meta as any
             }
           })
         )

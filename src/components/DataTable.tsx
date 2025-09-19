@@ -5,10 +5,9 @@ import {
   Search, 
   Plus, 
   Edit, 
-  Trash2, 
-  Check, 
-  X,
-  MoreHorizontal
+  Trash2,
+  Check,
+  X
 } from 'lucide-react'
 import clsx from 'clsx'
 

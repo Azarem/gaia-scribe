@@ -5,7 +5,8 @@ import { Wifi, WifiOff, AlertTriangle } from 'lucide-react'
 
 export default function ConnectionStatus() {
   const { session } = useAuthStore()
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'error'>('connecting')
+  type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
   const [lastError, setLastError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function ConnectionStatus() {
   }
 
   const getStatusIcon = () => {
-    switch (connectionStatus) {
+    switch (connectionStatus as ConnectionStatus) {
       case 'connected':
         return <Wifi className="h-4 w-4 text-green-500" />
       case 'connecting':
@@ -66,7 +67,7 @@ export default function ConnectionStatus() {
   }
 
   const getStatusText = () => {
-    switch (connectionStatus) {
+    switch (connectionStatus as ConnectionStatus) {
       case 'connected':
         return 'Connected'
       case 'connecting':
@@ -80,7 +81,7 @@ export default function ConnectionStatus() {
   }
 
   const getStatusColor = () => {
-    switch (connectionStatus) {
+    switch (connectionStatus as ConnectionStatus) {
       case 'connected':
         return 'bg-green-50 border-green-200 text-green-800'
       case 'connecting':

@@ -77,7 +77,7 @@ export function useProjectSectionCounts(projectId: string | undefined) {
 
         const errorResult = results.find(r => r.result.error)
         if (errorResult) {
-          throw new Error(`Failed to fetch ${errorResult.name}: ${errorResult.result.error.message}`)
+          throw new Error(`Failed to fetch ${errorResult.name}: ${errorResult.result.error?.message || 'Unknown error'}`)
         }
 
         // Update counts

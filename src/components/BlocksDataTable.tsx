@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react'
-import DataTable, { type DataTableProps, type ColumnDefinition } from './DataTable'
+import DataTable, { type DataTableProps } from './DataTable'
 import { db } from '../lib/supabase'
 import type { Block, BlockPart } from '@prisma/client'
 
@@ -232,7 +232,7 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
       if (col.key === 'expand') {
         return {
           ...col,
-          render: (value: any, row: BlockWithAddresses) => (
+          render: (_value: any, row: BlockWithAddresses) => (
             <button
               onClick={() => toggleBlockExpansion(row.id)}
               className="p-1 hover:bg-gray-100 rounded"

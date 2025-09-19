@@ -8,7 +8,7 @@ import ComingSoonModal from '../components/ComingSoonModal'
 import ImportProjectModal from '../components/ImportProjectModal'
 import UserSyncStatus from '../components/UserSyncStatus'
 import ConnectionStatus from '../components/ConnectionStatus'
-import SupabaseDiagnostics from '../components/SupabaseDiagnostics'
+
 
 import clsx from 'clsx'
 
@@ -301,7 +301,7 @@ export default function DashboardPage() {
                   <div className="space-y-2 text-sm text-gray-500">
                     <div className="flex items-center">
                       <Calendar className="h-4 w-4 mr-2" />
-                      <span>Updated {new Date(project.updatedAt).toLocaleDateString()}</span>
+                      <span>Updated {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Never'}</span>
                     </div>
                     
                     {project.gameRomId && (
