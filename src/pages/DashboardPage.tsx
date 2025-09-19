@@ -8,7 +8,7 @@ import ComingSoonModal from '../components/ComingSoonModal'
 import ImportProjectModal from '../components/ImportProjectModal'
 import UserSyncStatus from '../components/UserSyncStatus'
 import ConnectionStatus from '../components/ConnectionStatus'
-
+import PublicProjectsSection from '../components/PublicProjectsSection'
 
 import clsx from 'clsx'
 
@@ -220,7 +220,10 @@ export default function DashboardPage() {
         <UserSyncStatus />
 
         <div className="px-4 py-6 sm:px-0">
-          {/* Page Header */}
+          {/* Public Projects Section */}
+          <PublicProjectsSection className="mb-12" />
+
+          {/* My Projects Section Header */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">My Projects</h2>
             <p className="text-gray-600">

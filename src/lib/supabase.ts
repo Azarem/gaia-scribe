@@ -200,7 +200,8 @@ export const db = {
         .select('*')
         .eq('createdBy', userId)
         .is('deletedAt', null)
-        .order('updatedAt', { ascending: false })
+        .order('updatedAt', { ascending: false, nullsFirst: false })
+        .order('createdAt', { ascending: false })
     },
 
     async getPublic(searchQuery?: string) {
@@ -216,6 +217,54 @@ export const db = {
       }
 
       return query.limit(20)
+    },
+
+    // Public project discovery methods
+    async getPublicRecent(limit: number = 12) {
+      return supabase
+        .from('ScribeProject')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .order('createdAt', { ascending: false })
+        .limit(limit)
+    },
+
+    async getPublicRecentlyUpdated(limit: number = 12) {
+      return supabase
+        .from('ScribeProject')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .not('updatedAt', 'is', null)
+        .order('updatedAt', { ascending: false })
+        .limit(limit)
+    },
+
+    async getPublicMostActive(limit: number = 12) {
+      // Projects with recent updates, ordered by most recent activity
+      return supabase
+        .from('ScribeProject')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .not('updatedAt', 'is', null)
+        .gte('updatedAt', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) // Last 30 days
+        .order('updatedAt', { ascending: false })
+        .limit(limit)
+    },
+
+    async getPublicPopular(limit: number = 12) {
+      // For now, use a combination of recent creation and updates as a proxy for popularity
+      // This could be enhanced later with engagement metrics
+      return supabase
+        .from('ScribeProject')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .gte('createdAt', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()) // Last 90 days
+        .order('createdAt', { ascending: false })
+        .limit(limit)
     },
 
     async getByName(name: string) {
