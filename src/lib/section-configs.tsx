@@ -473,7 +473,7 @@ export const overridesColumns: ColumnDefinition<Override>[] = [
     filterable: true,
     editable: true,
     type: 'text',
-    render: (value) => value !== null && value !== undefined ? `0x${value.toString(16).toUpperCase().padStart(4, '0')}` : '',
+    render: (value) => value !== null && value !== undefined ? `0x${value.toString(16).toUpperCase().padStart(6, '0')}` : '',
     validate: (value) => {
       if (typeof value === 'number') return value < 0 ? 'Location must be non-negative' : null;
       if (!value || value.trim() === '') return 'Location is required'

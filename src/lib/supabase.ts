@@ -340,6 +340,91 @@ export const db = {
     },
   },
 
+  // Project Users (Contributors)
+  projectUsers: {
+    async getByProject(projectId: string) {
+      return supabase
+        .from('ProjectUser')
+        .select(`
+          *,
+          user:User!ProjectUser_userId_fkey (
+            id,
+            name,
+            email,
+            avatarUrl
+          )
+        `)
+        .eq('projectId', projectId)
+        .is('deletedAt', null)
+        .order('createdAt', { ascending: true })
+    },
+
+    async create(projectUser: { projectId: string; userId: string; role?: string }, createdBy: string) {
+      const projectUserId = createId()
+      return (supabase as any)
+        .from('ProjectUser')
+        .insert({
+          id: projectUserId,
+          projectId: projectUser.projectId,
+          userId: projectUser.userId,
+          role: projectUser.role || 'contributor',
+          createdBy: createdBy,
+        })
+        .select(`
+          *,
+          user:User!ProjectUser_userId_fkey (
+            id,
+            name,
+            email,
+            avatarUrl
+          )
+        `)
+        .single()
+    },
+
+    async update(id: string, updates: { role?: string }, userId: string) {
+      return (supabase as any)
+        .from('ProjectUser')
+        .update({
+          ...updates,
+          updatedBy: userId,
+        })
+        .eq('id', id)
+        .select(`
+          *,
+          user:User!ProjectUser_userId_fkey (
+            id,
+            name,
+            email,
+            avatarUrl
+          )
+        `)
+        .single()
+    },
+
+    async delete(id: string, userId: string) {
+      return (supabase as any)
+        .from('ProjectUser')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: userId,
+        })
+        .eq('id', id)
+    },
+
+    async removeByUserAndProject(projectId: string, userId: string, deletedBy: string) {
+      return (supabase as any)
+        .from('ProjectUser')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: deletedBy,
+        })
+        .eq('projectId', projectId)
+        .eq('userId', userId)
+        .is('deletedAt', null)
+    },
+  },
+
   // Cops
   cops: {
     async getByProject(projectId: string) {
@@ -1100,6 +1185,16 @@ export const db = {
         .eq('id', id)
         .is('deletedAt', null)
         .single()
+    },
+
+    async searchByEmail(email: string, limit: number = 10) {
+      return supabase
+        .from('User')
+        .select('id, name, email, avatarUrl')
+        .ilike('email', `%${email.trim()}%`)
+        .is('deletedAt', null)
+        .order('name', { ascending: true })
+        .limit(limit)
     },
     
     async upsert(user: { id: string; email?: string; name?: string; avatarUrl?: string }) {

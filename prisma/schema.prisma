@@ -23,9 +23,9 @@ model User {
   lastActiveObjectId   String?
   lastActiveObjectType String?
 
-  createdProjects ScribeProject[] @relation("projectCreatedBy")
-  updatedProjects ScribeProject[] @relation("projectUpdatedBy")
-  deletedProjects ScribeProject[] @relation("projectDeletedBy")
+  createdProjects  ScribeProject[] @relation("projectCreatedBy")
+  updatedProjects  ScribeProject[] @relation("projectUpdatedBy")
+  deletedProjects  ScribeProject[] @relation("projectDeletedBy")
   createdCops      Cop[]        @relation("copCreatedBy")
   updatedCops      Cop[]        @relation("copUpdatedBy")
   deletedCops      Cop[]        @relation("copDeletedBy")
@@ -56,15 +56,19 @@ model User {
   createdOverrides  Override[]      @relation("overrideCreatedBy")
   updatedOverrides  Override[]      @relation("overrideUpdatedBy")
   deletedOverrides  Override[]      @relation("overrideDeletedBy")
-  createdMnemonics GameMnemonic[]  @relation("mnemonicCreatedBy")
-  updatedMnemonics GameMnemonic[]  @relation("mnemonicUpdatedBy")
-  deletedMnemonics GameMnemonic[]  @relation("mnemonicDeletedBy")
+  createdMnemonics  GameMnemonic[]  @relation("mnemonicCreatedBy")
+  updatedMnemonics  GameMnemonic[]  @relation("mnemonicUpdatedBy")
+  deletedMnemonics  GameMnemonic[]  @relation("mnemonicDeletedBy")
   createdRewrites   Rewrite[]       @relation("rewriteCreatedBy")
   updatedRewrites   Rewrite[]       @relation("rewriteUpdatedBy")
   deletedRewrites   Rewrite[]       @relation("rewriteDeletedBy")
   createdUsers      User[]          @relation("userCreatedBy")
   deletedUsers      User[]          @relation("userDeletedBy")
   updatedUsers      User[]          @relation("userUpdatedBy")
+  createdProjectUsers ProjectUser[] @relation("projectUserCreatedBy")
+  deletedProjectUsers ProjectUser[] @relation("projectUserDeletedBy")
+  updatedProjectUsers ProjectUser[] @relation("projectUserUpdatedBy")
+  projectUsers        ProjectUser[] @relation("projectUserUser")
 
   createdAt DateTime @default(now())
   createdBy String @db.Uuid
@@ -99,6 +103,7 @@ model ScribeProject {
   mnemonics GameMnemonic[]
   overrides Override[]
   lastActiveUsers User[]
+  projectUsers ProjectUser[]
   
   //Audit Fields
   createdAt     DateTime @default(now())
@@ -112,6 +117,32 @@ model ScribeProject {
   updatedByUser User? @relation(name: "projectUpdatedBy", fields: [updatedBy], references: [id])
 
   @@index([name])
+}
+
+model ProjectUser {
+  id   String @id @default(cuid())
+  role String @default("contributor")
+
+  project   ScribeProject @relation(fields: [projectId], references: [id])
+  projectId String
+
+  user   User   @relation(name: "projectUserUser", fields: [userId], references: [id])
+  userId String @db.Uuid
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "projectUserCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "projectUserDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "projectUserUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
 }
 
 model Cop {

@@ -260,6 +260,22 @@ CREATE TABLE "Struct" (
     CONSTRAINT "Struct_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "ProjectUser" (
+    "id" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'contributor',
+    "projectId" TEXT NOT NULL,
+    "userId" UUID NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdBy" UUID NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+    "deletedBy" UUID,
+    "updatedAt" TIMESTAMP(3),
+    "updatedBy" UUID,
+
+    CONSTRAINT "ProjectUser_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_name_key" ON "User"("name");
 
@@ -358,6 +374,15 @@ CREATE INDEX "Struct_projectId_idx" ON "Struct"("projectId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Struct_projectId_name_key" ON "Struct"("projectId", "name");
+
+-- CreateIndex
+CREATE INDEX "ProjectUser_projectId_idx" ON "ProjectUser"("projectId");
+
+-- CreateIndex
+CREATE INDEX "ProjectUser_userId_idx" ON "ProjectUser"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProjectUser_projectId_userId_key" ON "ProjectUser"("projectId", "userId");
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_lastActiveProjectId_fkey" FOREIGN KEY ("lastActiveProjectId") REFERENCES "ScribeProject"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -524,12 +549,29 @@ ALTER TABLE "Struct" ADD CONSTRAINT "Struct_deletedBy_fkey" FOREIGN KEY ("delete
 -- AddForeignKey
 ALTER TABLE "Struct" ADD CONSTRAINT "Struct_updatedBy_fkey" FOREIGN KEY ("updatedBy") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
+-- AddForeignKey
+ALTER TABLE "ProjectUser" ADD CONSTRAINT "ProjectUser_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "ScribeProject"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProjectUser" ADD CONSTRAINT "ProjectUser_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProjectUser" ADD CONSTRAINT "ProjectUser_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProjectUser" ADD CONSTRAINT "ProjectUser_deletedBy_fkey" FOREIGN KEY ("deletedBy") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProjectUser" ADD CONSTRAINT "ProjectUser_updatedBy_fkey" FOREIGN KEY ("updatedBy") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
 
 DO $$
 BEGIN
   -- Check if we're in a Supabase/production environment by looking for specific extensions
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'supabase_vault') OR
-     EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_auth_admin') THEN
+  -- Also check if auth schema exists to avoid shadow database issues
+  IF (EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'supabase_vault') OR
+      EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_auth_admin')) AND
+     EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth') THEN
     
     GRANT USAGE ON SCHEMA public TO anon, authenticated;
     
@@ -540,7 +582,11 @@ BEGIN
     
     -- CRITICAL: Grant permissions for User table to authenticated users
     GRANT SELECT, INSERT, UPDATE, DELETE ON "User" TO authenticated;
-    
+
+    -- Grant permissions for ProjectUser table to authenticated users
+    GRANT SELECT, INSERT, UPDATE, DELETE ON "ProjectUser" TO authenticated;
+
+
     -- Enable Row Level Security on all tables
     ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
     ALTER TABLE "ScribeProject" ENABLE ROW LEVEL SECURITY;
@@ -556,6 +602,7 @@ BEGIN
     ALTER TABLE "StringType" ENABLE ROW LEVEL SECURITY;
     ALTER TABLE "StringCommand" ENABLE ROW LEVEL SECURITY;
     ALTER TABLE "Struct" ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "ProjectUser" ENABLE ROW LEVEL SECURITY;
     
     -- ====================================
     -- USER TABLE POLICIES
@@ -587,41 +634,39 @@ BEGIN
     -- SCRIBE PROJECT POLICIES
     -- ====================================
     
-    -- Anonymous users can view public projects
+    -- Anonymous and authenticated users can view public projects
     CREATE POLICY "Public projects are viewable by everyone"
     ON "ScribeProject"
     FOR SELECT
-    TO anon
-    USING ("isPublic" = true);
+    TO anon, authenticated
+    USING ("isPublic" = true AND "deletedAt" IS NULL);
     
-    -- Authenticated users can view public projects
-    CREATE POLICY "Authenticated users can view public projects"
+    -- Authenticated users can view their own projects and projects they contribute to
+    CREATE POLICY "Users can view their own projects and contributed projects"
     ON "ScribeProject"
     FOR SELECT
     TO authenticated
-    USING ("isPublic" = true);
-    
-    -- Authenticated users can view their own projects
-    CREATE POLICY "Users can view their own projects"
-    ON "ScribeProject"
-    FOR SELECT
-    TO authenticated
-    USING (auth.uid() = "createdBy");
+    USING (auth.uid() = "createdBy" OR EXISTS (
+        SELECT 1 FROM "ProjectUser" pu
+        WHERE pu."projectId" = "ScribeProject"."id"
+        AND pu."userId" = auth.uid()
+        AND pu."deletedAt" is null
+    ));
     
     -- Authenticated users can create projects
     CREATE POLICY "Users can create projects"
     ON "ScribeProject"
     FOR INSERT
     TO authenticated
-    WITH CHECK (auth.uid() = "createdBy");
+    WITH CHECK (auth.uid() = "createdBy" AND "deletedAt" IS NULL);
     
-    -- Authenticated users can update their own projects
-    CREATE POLICY "Users can update their own projects"
+    -- Authenticated users can update their own projects and projects they contribute to
+    CREATE POLICY "Users can update their own projects and contributed projects"
     ON "ScribeProject"
     FOR UPDATE
     TO authenticated
-    USING (auth.uid() = "createdBy")
-    WITH CHECK (auth.uid() = "createdBy");
+    USING (auth.uid() = "createdBy" AND "deletedAt" IS NULL)
+    WITH CHECK (auth.uid() = "createdBy" AND "deletedAt" IS NULL);
     
     -- Authenticated users can delete their own projects
     CREATE POLICY "Users can delete their own projects"
@@ -629,7 +674,57 @@ BEGIN
     FOR DELETE
     TO authenticated
     USING (auth.uid() = "createdBy");
-    
+
+    -- ====================================
+    -- PROJECT USER POLICIES
+    -- ====================================
+
+--THIS DOES NOT WORK
+    -- Users can view contributors of projects they have access to
+    -- CREATE POLICY "Users can view contributors of accessible projects"
+    -- ON "ProjectUser"
+    -- FOR SELECT
+    -- TO anon, authenticated
+    -- USING (EXISTS (
+    --     SELECT 1 FROM "ScribeProject" p
+    --     WHERE p."id" = "ProjectUser"."projectId" AND p."deletedAt" IS NULL AND p."isPublic" = true
+    -- ));
+
+    -- Project owners can add contributors
+    CREATE POLICY "Project owners can add contributors"
+    ON "ProjectUser"
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (EXISTS (
+        SELECT 1 FROM "ScribeProject" p
+        WHERE p."id" = "projectId" 
+        AND p."deletedAt" IS NULL
+        AND p."createdBy" = auth.uid()
+    ));
+
+    -- Project owners can update contributor roles
+    CREATE POLICY "Project owners can update contributors"
+    ON "ProjectUser"
+    FOR UPDATE
+    TO authenticated
+    USING (EXISTS (
+        SELECT 1 FROM "ScribeProject" p
+        WHERE p."id" = "projectId"
+        AND p."deletedAt" IS NULL
+        AND p."createdBy" = auth.uid()
+    ));
+
+    -- Project owners and contributors can remove contributors
+    CREATE POLICY "Project owners and contributors can remove contributors"
+    ON "ProjectUser"
+    FOR DELETE
+    TO authenticated
+    USING (EXISTS (
+        SELECT 1 FROM "ScribeProject" p
+        WHERE p.id = "projectId"
+        AND p."createdBy" = auth.uid()
+    ) OR "userId" = auth.uid());
+
     -- ====================================
     -- COP TABLE POLICIES
     -- ====================================
@@ -638,35 +733,36 @@ BEGIN
     CREATE POLICY "Public project cops are viewable by everyone"
     ON "Cop"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    -- Authenticated users can view cops from public projects and their own projects
-    CREATE POLICY "Authenticated users can view accessible cops"
-    ON "Cop"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
-    -- Authenticated users can modify cops in their own projects
+
+    -- Authenticated users can modify cops in their own projects and contributed projects
     CREATE POLICY "Users can modify cops in their projects"
     ON "Cop"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject" sp
+        WHERE sp."id" = "projectId" AND sp."deletedAt" IS NULL 
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject" sp
+        WHERE sp."id" = "projectId" AND sp."deletedAt" IS NULL 
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -677,70 +773,73 @@ BEGIN
     CREATE POLICY "Public project labels are viewable by everyone"
     ON "Label"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    -- Authenticated users can view and modify labels in accessible projects
-    CREATE POLICY "Authenticated users can view accessible labels"
-    ON "Label"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify labels in their projects"
     ON "Label"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject" sp
+        WHERE sp."id" = "projectId" AND sp."deletedAt" IS NULL 
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject" sp
+        WHERE sp."id" = "projectId" AND sp."deletedAt" IS NULL 
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
     -- REWRITE TABLE POLICIES
     -- ====================================
     
-    CREATE POLICY "Public project rewrites are viewable by everyone"
-    ON "Rewrite"
-    FOR SELECT
-    TO anon
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
-    ));
-    
     CREATE POLICY "Authenticated users can view accessible rewrites"
     ON "Rewrite"
     FOR SELECT
-    TO authenticated
+    TO anon, authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
+        SELECT 1 FROM "ScribeProject"
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
+
     CREATE POLICY "Users can modify rewrites in their projects"
     ON "Rewrite"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -750,33 +849,35 @@ BEGIN
     CREATE POLICY "Public project mnemonics are viewable by everyone"
     ON "GameMnemonic"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible mnemonics"
-    ON "GameMnemonic"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify mnemonics in their projects"
     ON "GameMnemonic"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -786,33 +887,35 @@ BEGIN
     CREATE POLICY "Public project overrides are viewable by everyone"
     ON "Override"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible overrides"
-    ON "Override"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify overrides in their projects"
     ON "Override"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -822,33 +925,35 @@ BEGIN
     CREATE POLICY "Public project files are viewable by everyone"
     ON "File"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible files"
-    ON "File"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify files in their projects"
     ON "File"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -858,33 +963,35 @@ BEGIN
     CREATE POLICY "Public project blocks are viewable by everyone"
     ON "Block"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible blocks"
-    ON "Block"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify blocks in their projects"
     ON "Block"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -894,37 +1001,39 @@ BEGIN
     CREATE POLICY "Public project block transforms are viewable by everyone"
     ON "BlockTransform"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "Block" b
         JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."isPublic" = true
+        WHERE b.id = "blockId" AND sp."isPublic" = true 
+        AND sp."deletedAt" IS NULL AND b."deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible block transforms"
-    ON "BlockTransform"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "Block" b
-        JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" 
-        AND (sp."isPublic" = true OR sp."createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify block transforms in their projects"
     ON "BlockTransform"
     FOR ALL
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "Block" b
-        JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
+        INNER JOIN "ScribeProject" sp ON b."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE b."id" = "blockId" AND b."deletedAt" IS NULL
+        AND (sp."createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp.id
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "Block" b
-        JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
+        INNER JOIN "ScribeProject" sp ON b."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE b."id" = "blockId" AND b."deletedAt" IS NULL
+        AND (sp."createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -934,37 +1043,38 @@ BEGIN
     CREATE POLICY "Public project block parts are viewable by everyone"
     ON "BlockPart"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "Block" b
-        JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."isPublic" = true
+        INNER JOIN "ScribeProject" sp ON b."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE b."id" = "blockId" AND sp."isPublic" = true AND b."deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible block parts"
-    ON "BlockPart"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "Block" b
-        JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" 
-        AND (sp."isPublic" = true OR sp."createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify block parts in their projects"
     ON "BlockPart"
     FOR ALL
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "Block" b
-        JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
+        INNER JOIN "ScribeProject" sp ON b."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE b."id" = "blockId" AND b."deletedAt" IS NULL 
+        AND (sp."createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "Block" b
-        JOIN "ScribeProject" sp ON b."projectId" = sp.id
-        WHERE b.id = "blockId" AND sp."createdBy" = auth.uid()
+        INNER JOIN "ScribeProject" sp ON b."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE b."id" = "blockId" AND b."deletedAt" IS NULL 
+        AND (sp."createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -974,33 +1084,35 @@ BEGIN
     CREATE POLICY "Public project string types are viewable by everyone"
     ON "StringType"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible string types"
-    ON "StringType"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify string types in their projects"
     ON "StringType"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -1010,37 +1122,38 @@ BEGIN
     CREATE POLICY "Public project string commands are viewable by everyone"
     ON "StringCommand"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "StringType" st
-        JOIN "ScribeProject" sp ON st."projectId" = sp.id
-        WHERE st.id = "stringTypeId" AND sp."isPublic" = true
+        INNER JOIN "ScribeProject" sp ON st."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE st."id" = "stringTypeId" AND sp."isPublic" = true AND st."deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible string commands"
-    ON "StringCommand"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "StringType" st
-        JOIN "ScribeProject" sp ON st."projectId" = sp.id
-        WHERE st.id = "stringTypeId" 
-        AND (sp."isPublic" = true OR sp."createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify string commands in their projects"
     ON "StringCommand"
     FOR ALL
     TO authenticated
     USING (EXISTS (
         SELECT 1 FROM "StringType" st
-        JOIN "ScribeProject" sp ON st."projectId" = sp.id
-        WHERE st.id = "stringTypeId" AND sp."createdBy" = auth.uid()
+        INNER JOIN "ScribeProject" sp ON st."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE st."id" = "stringTypeId" AND st."deletedAt" IS NULL
+        AND (sp."createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM "StringType" st
-        JOIN "ScribeProject" sp ON st."projectId" = sp.id
-        WHERE st.id = "stringTypeId" AND sp."createdBy" = auth.uid()
+        INNER JOIN "ScribeProject" sp ON st."projectId" = sp."id" AND sp."deletedAt" IS NULL
+        WHERE st."id" = "stringTypeId" AND st."deletedAt" IS NULL
+        AND (sp."createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = sp."id"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -1050,33 +1163,35 @@ BEGIN
     CREATE POLICY "Public project structs are viewable by everyone"
     ON "Struct"
     FOR SELECT
-    TO anon
+    TO anon, authenticated
     USING (EXISTS (
         SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "isPublic" = true
+        WHERE "id" = "projectId" AND "isPublic" = true AND "deletedAt" IS NULL
     ));
-    
-    CREATE POLICY "Authenticated users can view accessible structs"
-    ON "Struct"
-    FOR SELECT
-    TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" 
-        AND ("isPublic" = true OR "createdBy" = auth.uid())
-    ));
-    
+
     CREATE POLICY "Users can modify structs in their projects"
     ON "Struct"
     FOR ALL
     TO authenticated
     USING (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ))
     WITH CHECK (EXISTS (
-        SELECT 1 FROM "ScribeProject" 
-        WHERE id = "projectId" AND "createdBy" = auth.uid()
+        SELECT 1 FROM "ScribeProject"
+        WHERE id = "projectId" AND "deletedAt" IS NULL
+        AND ("createdBy" = auth.uid() OR EXISTS (
+            SELECT 1 FROM "ProjectUser" pu
+            WHERE pu."projectId" = "projectId"
+            AND pu."userId" = auth.uid()
+            AND pu."deletedAt" is null
+        ))
     ));
     
     -- ====================================
@@ -1089,6 +1204,7 @@ BEGIN
     
     -- Add all tables to realtime publication
     ALTER PUBLICATION supabase_realtime ADD TABLE "ScribeProject";
+    ALTER PUBLICATION supabase_realtime ADD TABLE "ProjectUser";
     ALTER PUBLICATION supabase_realtime ADD TABLE "Cop";
     ALTER PUBLICATION supabase_realtime ADD TABLE "Label";
     ALTER PUBLICATION supabase_realtime ADD TABLE "Rewrite";

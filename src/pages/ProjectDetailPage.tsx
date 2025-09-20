@@ -7,6 +7,7 @@ import type { ScribeProject } from '@prisma/client'
 import EditProjectModal from '../components/EditProjectModal'
 import DeleteProjectModal from '../components/DeleteProjectModal'
 import SectionCard from '../components/SectionCard'
+import ContributorManagement from '../components/ContributorManagement'
 import { useProjectSectionCounts } from '../hooks/useProjectSectionCounts'
 import { PROJECT_SECTIONS } from '../lib/project-sections'
 import clsx from 'clsx'
@@ -196,6 +197,11 @@ export default function ProjectDetailPage() {
               loading={countsLoading}
             />
           ))}
+        </div>
+
+        {/* Contributors Section */}
+        <div className="mb-8">
+          <ContributorManagement project={project} isOwner={isOwner} />
         </div>
 
         {/* Project Information */}
