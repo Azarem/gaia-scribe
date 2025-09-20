@@ -213,7 +213,7 @@ export const db = {
         .order('updatedAt', { ascending: false })
 
       if (searchQuery?.trim()) {
-        query = query.ilike('name', `%${searchQuery.trim()}%`)
+        query = query.ilike('name', `${searchQuery.trim()}`)
       }
 
       return query.limit(20)
@@ -271,7 +271,7 @@ export const db = {
       return supabase
         .from('ScribeProject')
         .select('*')
-        .ilike('name', `%${name.trim()}%`)
+        .ilike('name', `${name.trim()}`)
         .is('deletedAt', null)
         .order('updatedAt', { ascending: false })
     },
@@ -285,7 +285,7 @@ export const db = {
         .order('updatedAt', { ascending: false })
 
       if (nameFilter?.trim()) {
-        query = query.ilike('name', `%${nameFilter.trim()}%`)
+        query = query.ilike('name', `${nameFilter.trim()}`)
       }
 
       return query
@@ -1191,7 +1191,7 @@ export const db = {
       return supabase
         .from('User')
         .select('id, name, email, avatarUrl')
-        .ilike('email', `%${email.trim()}%`)
+        .ilike('email', `${email.trim()}`)
         .is('deletedAt', null)
         .order('name', { ascending: true })
         .limit(limit)
@@ -1293,7 +1293,7 @@ export const db = {
 
         if (searchQuery?.trim()) {
           // Filter by game name using the joined game table
-          url += `&gameRom.game.name=ilike.%25${encodeURIComponent(searchQuery.trim())}%25`
+          url += `&gameRom.game.name=ilike.${encodeURIComponent(searchQuery.trim())}`
         }
 
         const response = await fetch(url, {
@@ -1326,7 +1326,7 @@ export const db = {
 
         if (searchQuery?.trim()) {
           // Filter by project name using the joined project table
-          url += `&project.name=ilike.%25${encodeURIComponent(searchQuery.trim())}%25`
+          url += `&project.name=ilike.${encodeURIComponent(searchQuery.trim())}`
         }
 
         const response = await fetch(url, {

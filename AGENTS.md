@@ -712,7 +712,7 @@ export const db = {
         .order('updatedAt', { ascending: false })
 
       if (nameFilter?.trim()) {
-        query = query.ilike('name', `%${nameFilter.trim()}%`)
+        query = query.ilike('name', `${nameFilter.trim()}`)
       }
 
       return query
