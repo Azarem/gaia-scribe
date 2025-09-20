@@ -59,7 +59,7 @@ export default function ProjectDetailPage() {
     loadProject()
   }, [id])
 
-  const isOwner = user && project && user.id === project.createdBy
+  const isOwner = Boolean(user && project && user.id === project.createdBy)
 
   const handleBack = () => {
     navigate('/dashboard')
