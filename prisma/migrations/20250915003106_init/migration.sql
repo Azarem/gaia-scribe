@@ -609,11 +609,11 @@ BEGIN
     -- ====================================
     
     -- Users can only see their own profile and public project creators
-    CREATE POLICY "Users can view their own profile"
+    CREATE POLICY "Users can view other user's profile"
     ON "User"
     FOR SELECT
     TO authenticated
-    USING (auth.uid() = id);
+    USING ("deletedAt" IS NULL);
     
     -- Users can update their own profile
     CREATE POLICY "Users can update their own profile"
