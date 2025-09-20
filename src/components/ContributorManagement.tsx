@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuthStore } from '../stores/auth-store'
 import { db } from '../lib/supabase'
 import { Users, Plus, Trash2, Search, Mail, UserCheck } from 'lucide-react'
@@ -36,10 +36,11 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [searchEmail, setSearchEmail] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<User[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [addingUser, setAddingUser] = useState<string | null>(null)
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Load contributors
   useEffect(() => {
@@ -80,17 +81,17 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
     }
   }
 
-  // Search users by email
-  const searchUsers = async (email: string) => {
-    if (!email.trim()) {
+  // Search users by name or email with debouncing
+  const searchUsers = useCallback(async (query: string) => {
+    if (!query.trim()) {
       setSearchResults([])
       return
     }
 
     try {
       setSearchLoading(true)
-      const { data, error } = await db.users.searchByEmail(email)
-      
+      const { data, error } = await db.users.search(query)
+
       if (error) {
         console.error('Error searching users:', error)
         return
@@ -101,7 +102,7 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
         project.createdBy,
         ...contributors.map(c => c.userId)
       ])
-      
+
       const filteredResults = (data || []).filter(u => !existingUserIds.has(u.id))
       setSearchResults(filteredResults)
     } catch (err) {
@@ -109,7 +110,41 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
     } finally {
       setSearchLoading(false)
     }
-  }
+  }, [project.createdBy, contributors])
+
+  // Debounced search handler
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query)
+
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    // Clear results immediately if query is empty
+    if (!query.trim()) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+
+    // Set loading state immediately for better UX
+    setSearchLoading(true)
+
+    // Set new timeout for debounced search
+    searchTimeoutRef.current = setTimeout(() => {
+      searchUsers(query)
+    }, 400) // 400ms debounce delay
+  }, [searchUsers])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Add contributor
   const addContributor = async (userId: string) => {
@@ -133,7 +168,7 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
 
       if (data) {
         setContributors(prev => [...prev, data])
-        setSearchEmail('')
+        setSearchQuery('')
         setSearchResults([])
         setShowAddModal(false)
       }
@@ -286,17 +321,14 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
               
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Search by email
+                  Search by name or email
                 </label>
                 <div className="relative">
                   <input
-                    type="email"
-                    value={searchEmail}
-                    onChange={(e) => {
-                      setSearchEmail(e.target.value)
-                      searchUsers(e.target.value)
-                    }}
-                    placeholder="Enter email address..."
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    placeholder="Enter name or email address..."
                     className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
@@ -359,7 +391,7 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
                 <button
                   onClick={() => {
                     setShowAddModal(false)
-                    setSearchEmail('')
+                    setSearchQuery('')
                     setSearchResults([])
                   }}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

@@ -1187,14 +1187,24 @@ export const db = {
         .single()
     },
 
-    async searchByEmail(email: string, limit: number = 10) {
+    async search(query: string, limit: number = 10) {
+      const trimmedQuery = query.trim()
+      if (!trimmedQuery) {
+        return { data: [], error: null }
+      }
+
       return supabase
         .from('User')
         .select('id, name, email, avatarUrl')
-        .ilike('email', `%${email.trim()}%`)
+        .or(`name.ilike.%${trimmedQuery}%,email.ilike.%${trimmedQuery}%`)
         .is('deletedAt', null)
         .order('name', { ascending: true })
         .limit(limit)
+    },
+
+    // Keep the old method for backward compatibility
+    async searchByEmail(email: string, limit: number = 10) {
+      return this.search(email, limit)
     },
     
     async upsert(user: { id: string; email?: string; name?: string; avatarUrl?: string }) {
