@@ -287,9 +287,9 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
                   <p className="text-sm font-medium text-gray-900">
                     {contributor.user.name || 'Unknown User'}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  {/* <p className="text-sm text-gray-500">
                     {contributor.user.email}
-                  </p>
+                  </p> */}
                 </div>
                 <div className="ml-4">
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -366,9 +366,9 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
                           <p className="text-sm font-medium text-gray-900">
                             {searchUser.name || 'Unknown User'}
                           </p>
-                          <p className="text-sm text-gray-500">
+                          {/* <p className="text-sm text-gray-500">
                             {searchUser.email}
-                          </p>
+                          </p> */}
                         </div>
                       </div>
                       <button
