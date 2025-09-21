@@ -82,6 +82,10 @@ model User {
 
   @@index([email])
   @@index([name])
+  @@index([lastActiveProjectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model ScribeProject {
@@ -117,6 +121,9 @@ model ScribeProject {
   updatedByUser User? @relation(name: "projectUpdatedBy", fields: [updatedBy], references: [id])
 
   @@index([name])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model ProjectUser {
@@ -143,6 +150,9 @@ model ProjectUser {
   @@unique([projectId, userId])
   @@index([projectId])
   @@index([userId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model Cop {
@@ -170,6 +180,9 @@ model Cop {
   @@unique([projectId, code])
   @@unique([projectId, mnemonic])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model Label {
@@ -194,6 +207,9 @@ model Label {
 
   @@unique([projectId, location])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model Rewrite {
@@ -218,6 +234,9 @@ model Rewrite {
 
   @@unique([projectId, location])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model GameMnemonic {
@@ -244,6 +263,9 @@ model GameMnemonic {
   @@unique([projectId, address])
   @@unique([projectId, mnemonic])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model Override {
@@ -269,6 +291,9 @@ model Override {
 
   @@unique([projectId, location])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model File {
@@ -300,6 +325,9 @@ model File {
 
   @@unique([projectId, name])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model Block {
@@ -332,6 +360,9 @@ model Block {
 
   @@unique([projectId, name])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model BlockTransform {
@@ -356,6 +387,9 @@ model BlockTransform {
 
   @@unique([blockId, regex])
   @@index([blockId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 model BlockPart {
@@ -383,6 +417,9 @@ model BlockPart {
 
   @@unique([blockId, name])
   @@index([blockId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 
@@ -416,6 +453,9 @@ model StringType {
   @@unique([projectId, name])
   @@unique([projectId, delimiter])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 // Commands for StringType
@@ -447,6 +487,9 @@ model StringCommand {
   @@unique([stringTypeId, code])
   @@unique([stringTypeId, mnemonic])
   @@index([stringTypeId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
 
 
@@ -477,4 +520,7 @@ model Struct {
   
   @@unique([projectId, name])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
 }
