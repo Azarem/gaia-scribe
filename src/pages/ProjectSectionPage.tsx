@@ -361,6 +361,7 @@ export default function ProjectSectionPage() {
           <BlocksDataTable
             data={sectionData}
             projectId={id || ''}
+            project={project || undefined}
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
@@ -368,6 +369,7 @@ export default function ProjectSectionPage() {
             onEdit={canEdit && !permissionsLoading ? handleEdit : undefined}
             onDelete={canEdit && !permissionsLoading ? handleDelete : undefined}
             onRefresh={handleRefresh}
+            onBuildComplete={handleRefresh}
             searchPlaceholder={`Search ${sectionConfig.name.toLowerCase()}...`}
             addButtonText={`Add ${sectionConfig.name.slice(0, -1)}`} // Remove 's' from plural
             emptyMessage={`No ${sectionConfig.name.toLowerCase()} found. Click "Add ${sectionConfig.name.slice(0, -1)}" to create your first entry.`}

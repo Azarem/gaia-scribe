@@ -1,10 +1,14 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Check, X, Edit2, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Check, X, Edit2, Trash2, Hammer, Eye } from 'lucide-react'
 import DataTable, { type DataTableProps } from './DataTable'
 import { useAuthStore } from '../stores/auth-store'
 import { db } from '../lib/supabase'
-import type { Block, BlockPart } from '@prisma/client'
+import type { Block, BlockPart, ScribeProject } from '@prisma/client'
 import clsx from 'clsx'
+import RomPathModal from './RomPathModal'
+import BlockArtifactModal from './BlockArtifactModal'
+import NotificationModal from './NotificationModal'
+import { createBuildOrchestrator, type BuildProgressCallback } from '../lib/build-orchestrator'
 
 interface BlockWithAddresses extends Block {
   startAddress?: number
@@ -15,9 +19,11 @@ interface BlockWithAddresses extends Block {
 interface BlocksDataTableProps extends Omit<DataTableProps<BlockWithAddresses>, 'data'> {
   data: Block[]
   projectId: string
+  project?: ScribeProject
+  onBuildComplete?: () => void
 }
 
-export default function BlocksDataTable({ data, projectId, columns, ...props }: BlocksDataTableProps) {
+export default function BlocksDataTable({ data, projectId, project, onBuildComplete, columns, ...props }: BlocksDataTableProps) {
   const { user } = useAuthStore()
   const [currentBank, setCurrentBank] = useState<number>(0)
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set())
@@ -30,6 +36,31 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
   const [editingPartId, setEditingPartId] = useState<string | null>(null)
   const [editPartFormData, setEditPartFormData] = useState<Partial<BlockPart>>({})
   const [editPartValidationErrors, setEditPartValidationErrors] = useState<Record<string, string>>({})
+
+  // Build-related state
+  const [showRomPathModal, setShowRomPathModal] = useState(false)
+  const [isBuilding, setIsBuilding] = useState(false)
+  const [buildProgress, setBuildProgress] = useState<{ step: string; progress: number; total: number } | null>(null)
+
+  // Artifact viewing state
+  const [showArtifactModal, setShowArtifactModal] = useState(false)
+  const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
+
+  // Notification state
+  const [notification, setNotification] = useState<{
+    show: boolean
+    type: 'success' | 'error' | 'warning' | 'info'
+    title: string
+    message: string
+    details?: string[]
+    showRetry?: boolean
+    retryAction?: () => void
+  }>({
+    show: false,
+    type: 'info',
+    title: '',
+    message: ''
+  })
 
   // Fetch all BlockParts for the project
   useEffect(() => {
@@ -445,8 +476,8 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     const errors = partValidationErrors[blockId] || {}
     let value = (formData as any)[field] || ''
 
-    // Handle hex display for location
-    if (field === 'location' && typeof value === 'number') {
+    // Handle hex display for location and size
+    if ((field === 'location' || field === 'size') && typeof value === 'number') {
       value = `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
     }
 
@@ -455,8 +486,8 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     const handleChange = (newValue: string) => {
       let processedValue: any = newValue
 
-      // Handle hex input for location
-      if (field === 'location') {
+      // Handle hex input for location and size
+      if (field === 'location' || field === 'size') {
         const hexValue = newValue.replace(/^0x/i, '')
         if (/^[0-9A-Fa-f]*$/.test(hexValue) && hexValue !== '') {
           processedValue = parseInt(hexValue, 16)
@@ -501,11 +532,11 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
           type={type === 'number' ? 'number' : 'text'}
           value={value}
           onChange={(e) => handleChange(e.target.value)}
-          className={clsx(baseClasses, field === 'location' && 'font-mono')}
+          className={clsx(baseClasses, (field === 'location' || field === 'size') && 'font-mono')}
           placeholder={
             field === 'name' ? 'Part name' :
             field === 'location' ? '0x1000' :
-            field === 'size' ? 'Size in bytes' :
+            field === 'size' ? '0x0020' :
             field === 'type' ? 'e.g., code, data' :
             field === 'index' ? 'Order' : ''
           }
@@ -524,8 +555,8 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     const errors = editPartValidationErrors
     let value = (formData as any)[field] || ''
 
-    // Handle hex display for location
-    if (field === 'location' && typeof value === 'number') {
+    // Handle hex display for location and size
+    if ((field === 'location' || field === 'size') && typeof value === 'number') {
       value = `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
     }
 
@@ -534,8 +565,8 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     const handleChange = (newValue: string) => {
       let processedValue: any = newValue
 
-      // Handle hex input for location
-      if (field === 'location') {
+      // Handle hex input for location and size
+      if (field === 'location' || field === 'size') {
         const hexValue = newValue.replace(/^0x/i, '')
         if (/^[0-9A-Fa-f]*$/.test(hexValue) && hexValue !== '') {
           processedValue = parseInt(hexValue, 16)
@@ -573,7 +604,7 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
           type={type === 'number' ? 'number' : 'text'}
           value={value}
           onChange={(e) => handleChange(e.target.value)}
-          className={clsx(baseClasses, field === 'location' && 'font-mono')}
+          className={clsx(baseClasses, (field === 'location' || field === 'size') && 'font-mono')}
           min={type === 'number' ? 0 : undefined}
         />
         {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
@@ -599,6 +630,134 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [availableBanks, currentBank, handlePreviousBank, handleNextBank])
 
+  // Build functionality
+  const handleBuildProject = () => {
+    if (!project) {
+      console.error('Project not available for build')
+      showNotification(
+        'error',
+        'Project Not Available',
+        'Cannot start build process because project data is not available.',
+        ['Please refresh the page and try again.']
+      )
+      return
+    }
+
+    if (data.length === 0) {
+      showNotification(
+        'warning',
+        'No Blocks to Build',
+        'There are no blocks in this project to build.',
+        ['Add some blocks to your project before attempting to build.']
+      )
+      return
+    }
+
+    setShowRomPathModal(true)
+  }
+
+  // Notification helpers
+  const showNotification = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    details?: string[],
+    showRetry?: boolean,
+    retryAction?: () => void
+  ) => {
+    setNotification({
+      show: true,
+      type,
+      title,
+      message,
+      details,
+      showRetry,
+      retryAction
+    })
+  }
+
+  const hideNotification = () => {
+    setNotification(prev => ({ ...prev, show: false }))
+  }
+
+  const handleRomFileConfirm = async (romFile: File, romData: Uint8Array) => {
+    if (!project) return
+
+    setIsBuilding(true)
+    setBuildProgress({ step: 'Initializing build...', progress: 0, total: 6 })
+
+    try {
+      const progressCallback: BuildProgressCallback = (step, progress, total) => {
+        setBuildProgress({ step, progress, total })
+      }
+
+      const orchestrator = createBuildOrchestrator(project, romFile, romData, progressCallback)
+      const result = await orchestrator.build()
+
+      if (result.success) {
+        console.log('Build completed successfully:', result.artifacts)
+        showNotification(
+          'success',
+          'Build Completed Successfully',
+          `Generated ${result.artifacts.length} assembly artifacts for your blocks.`,
+          result.artifacts.map(artifact => `${artifact.blockName}: ${artifact.content.split('\n').length} lines`)
+        )
+        if (onBuildComplete) {
+          onBuildComplete()
+        }
+      } else {
+        console.error('Build failed:', result.errors)
+        showNotification(
+          'error',
+          'Build Failed',
+          'The build process encountered errors and could not complete successfully.',
+          result.errors,
+          true,
+          () => handleRomFileConfirm(romFile, romData)
+        )
+      }
+    } catch (error) {
+      console.error('Build error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
+      showNotification(
+        'error',
+        'Build Error',
+        'An unexpected error occurred during the build process.',
+        [errorMessage],
+        true,
+        () => handleRomFileConfirm(romFile, romData)
+      )
+    } finally {
+      setIsBuilding(false)
+      setBuildProgress(null)
+    }
+  }
+
+  const handleRomPathCancel = () => {
+    setShowRomPathModal(false)
+  }
+
+  // Artifact viewing functionality
+  const handleViewArtifact = (block: Block) => {
+    try {
+      setSelectedBlock(block)
+      setShowArtifactModal(true)
+    } catch (error) {
+      console.error('Error opening artifact modal:', error)
+      showNotification(
+        'error',
+        'Error Opening Artifact',
+        'Failed to open the artifact viewer. Please try again.',
+        [error instanceof Error ? error.message : 'Unknown error']
+      )
+    }
+  }
+
+  const handleCloseArtifactModal = () => {
+    setShowArtifactModal(false)
+    setSelectedBlock(null)
+  }
+
   // Enhanced columns with expand functionality
   const enhancedColumns = useMemo(() => {
     return columns.map(col => {
@@ -620,6 +779,25 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
           )
         }
       }
+
+      if (col.key === 'name') {
+        return {
+          ...col,
+          render: (value: any, row: BlockWithAddresses) => (
+            <div className="flex items-center space-x-2">
+              <span className="font-medium">{value}</span>
+              <button
+                onClick={() => handleViewArtifact(row)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+                title="View build artifact"
+              >
+                <Eye className="h-4 w-4" />
+              </button>
+            </div>
+          )
+        }
+      }
+
       return col
     })
   }, [columns, expandedBlocks])
@@ -654,7 +832,7 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            
+
             <select
               value={currentBank}
               onChange={(e) => handleBankSelect(parseInt(e.target.value))}
@@ -666,7 +844,7 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
                 </option>
               ))}
             </select>
-            
+
             <button
               onClick={handleNextBank}
               disabled={availableBanks.indexOf(currentBank) === availableBanks.length - 1}
@@ -677,13 +855,28 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
             </button>
           </div>
         </div>
-        
-        <div className="text-sm text-gray-500">
-          {currentBankBlocks.length} block{currentBankBlocks.length !== 1 ? 's' : ''} in this bank
-          {availableBanks.length > 1 && (
-            <span className="ml-2">
-              • {availableBanks.length} bank{availableBanks.length !== 1 ? 's' : ''} total
-            </span>
+
+        <div className="flex items-center space-x-4">
+          <div className="text-sm text-gray-500">
+            {currentBankBlocks.length} block{currentBankBlocks.length !== 1 ? 's' : ''} in this bank
+            {availableBanks.length > 1 && (
+              <span className="ml-2">
+                • {availableBanks.length} bank{availableBanks.length !== 1 ? 's' : ''} total
+              </span>
+            )}
+          </div>
+
+          {/* Build Button */}
+          {project && (
+            <button
+              onClick={handleBuildProject}
+              disabled={isBuilding || data.length === 0}
+              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Build project and generate assembly code"
+            >
+              <Hammer className="h-4 w-4 mr-2" />
+              {isBuilding ? 'Building...' : 'Build'}
+            </button>
           )}
         </div>
       </div>
@@ -736,8 +929,10 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
                             )}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
-                            {isEditing ? renderEditPartEditableCell('size', 'number') : (
-                              <span className="text-sm text-gray-900">{part.size}</span>
+                            {isEditing ? renderEditPartEditableCell('size', 'hex') : (
+                              <span className="text-sm font-mono text-gray-900">
+                                0x{part.size.toString(16).toUpperCase().padStart(4, '0')}
+                              </span>
                             )}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
@@ -803,7 +998,7 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
                         {renderPartEditableCell(block.id, 'location', 'hex')}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        {renderPartEditableCell(block.id, 'size', 'number')}
+                        {renderPartEditableCell(block.id, 'size', 'hex')}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-400">
                         {/* END address - calculated automatically */}
@@ -842,7 +1037,61 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
         }}
       />
 
+      {/* ROM File Modal */}
+      <RomPathModal
+        isOpen={showRomPathModal}
+        onClose={handleRomPathCancel}
+        onConfirm={handleRomFileConfirm}
+        title="Build Project"
+        description="To build the project and generate assembly code, please select your ROM file."
+      />
 
+      {/* Block Artifact Modal */}
+      <BlockArtifactModal
+        isOpen={showArtifactModal}
+        onClose={handleCloseArtifactModal}
+        block={selectedBlock}
+      />
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.show}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+        details={notification.details}
+        showRetry={notification.showRetry}
+        onRetry={notification.retryAction}
+      />
+
+      {/* Build Progress Display */}
+      {isBuilding && buildProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Building Project</h3>
+
+            <div className="mb-4">
+              <div className="text-sm text-gray-600 mb-2">{buildProgress.step}</div>
+              <div className="flex items-center">
+                <div className="flex-1 bg-gray-200 rounded-full h-2 mr-3">
+                  <div
+                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(buildProgress.progress / buildProgress.total) * 100}%` }}
+                  ></div>
+                </div>
+                <span className="text-sm text-gray-600">
+                  {buildProgress.progress}/{buildProgress.total}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-500">
+              Please wait while we analyze your ROM and generate assembly code...
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

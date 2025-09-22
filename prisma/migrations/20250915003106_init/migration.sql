@@ -276,6 +276,22 @@ CREATE TABLE "ProjectUser" (
     CONSTRAINT "ProjectUser_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "public"."BlockArtifact" (
+    "id" TEXT NOT NULL,
+    "blockId" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "meta" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdBy" UUID NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+    "deletedBy" UUID,
+    "updatedAt" TIMESTAMP(3),
+    "updatedBy" UUID,
+
+    CONSTRAINT "BlockArtifact_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_name_key" ON "User"("name");
 
@@ -521,6 +537,35 @@ CREATE INDEX "Struct_updatedBy_idx" ON "public"."Struct"("updatedBy");
 
 -- CreateIndex
 CREATE INDEX "Struct_deletedBy_idx" ON "public"."Struct"("deletedBy");
+
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BlockArtifact_blockId_key" ON "public"."BlockArtifact"("blockId");
+
+-- CreateIndex
+CREATE INDEX "BlockArtifact_blockId_idx" ON "public"."BlockArtifact"("blockId");
+
+-- CreateIndex
+CREATE INDEX "BlockArtifact_createdBy_idx" ON "public"."BlockArtifact"("createdBy");
+
+-- CreateIndex
+CREATE INDEX "BlockArtifact_updatedBy_idx" ON "public"."BlockArtifact"("updatedBy");
+
+-- CreateIndex
+CREATE INDEX "BlockArtifact_deletedBy_idx" ON "public"."BlockArtifact"("deletedBy");
+
+-- AddForeignKey
+ALTER TABLE "public"."BlockArtifact" ADD CONSTRAINT "BlockArtifact_blockId_fkey" FOREIGN KEY ("blockId") REFERENCES "public"."Block"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."BlockArtifact" ADD CONSTRAINT "BlockArtifact_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."BlockArtifact" ADD CONSTRAINT "BlockArtifact_deletedBy_fkey" FOREIGN KEY ("deletedBy") REFERENCES "public"."User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."BlockArtifact" ADD CONSTRAINT "BlockArtifact_updatedBy_fkey" FOREIGN KEY ("updatedBy") REFERENCES "public"."User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_lastActiveProjectId_fkey" FOREIGN KEY ("lastActiveProjectId") REFERENCES "ScribeProject"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -815,6 +860,36 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE PROCEDURE create_block_table_policies(table_name text)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Enable RLS on the target table
+  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', table_name);
+  
+  -- Create policy for public viewing
+  EXECUTE format(
+    'CREATE POLICY "Public project %ss is viewable by everyone" ON %I FOR SELECT TO anon, authenticated USING (public.can_view_project_block("blockId"));',
+    table_name,
+    table_name
+  );
+  
+  -- Create policy for authenticated users to insert cops
+  EXECUTE format(
+    'CREATE POLICY "Users can create %ss in their projects" ON %I FOR INSERT TO authenticated WITH CHECK (public.can_edit_project_block("blockId") AND "createdBy" = (SELECT auth.uid()));',
+    table_name,
+    table_name
+  );
+  
+  -- Create policy for authenticated users to update cops
+  EXECUTE format(
+    'CREATE POLICY "Users can modify %ss in their projects" ON %I FOR UPDATE TO authenticated USING (public.can_edit_project_block("blockId")) WITH CHECK (public.can_edit_project_block("blockId"));',
+    table_name,
+    table_name
+  );
+END;
+$$;
+
 DO $$
 BEGIN
   -- Check if we're in a Supabase/production environment by looking for specific extensions
@@ -946,50 +1021,17 @@ BEGIN
     -- ====================================
     -- BLOCK TRANSFORM TABLE POLICIES
     -- ====================================
-    ALTER TABLE "BlockTransform" ENABLE ROW LEVEL SECURITY;
-
-    CREATE POLICY "Public project block transforms are viewable by everyone"
-    ON "BlockTransform"
-    FOR SELECT
-    TO anon, authenticated
-    USING (public.can_view_project_block("blockId"));
-
-    CREATE POLICY "Users can create block transforms in their projects"
-    ON "BlockTransform"
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (public.can_edit_project_block("blockId") AND "createdBy" = (SELECT auth.uid()));
-
-    CREATE POLICY "Users can modify block transforms in their projects"
-    ON "BlockTransform"
-    FOR UPDATE
-    TO authenticated
-    USING (public.can_edit_project_block("blockId"))
-    WITH CHECK (public.can_edit_project_block("blockId"));
+    CALL create_block_table_policies('BlockTransform');
     
     -- ====================================
     -- BLOCK PART TABLE POLICIES
     -- ====================================
-    ALTER TABLE "BlockPart" ENABLE ROW LEVEL SECURITY;
-    
-    CREATE POLICY "Public or owned Block parts are viewable by everyone"
-    ON "BlockPart"
-    FOR SELECT
-    TO anon, authenticated
-    USING (public.can_view_project_block("blockId"));
+    CALL create_block_table_policies('BlockPart');
 
-    CREATE POLICY "Users can create block parts in their projects"
-    ON "BlockPart"
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (public.can_edit_project_block("blockId") AND "createdBy" = (SELECT auth.uid()));
-
-    CREATE POLICY "Users can modify block parts in their projects"
-    ON "BlockPart"
-    FOR UPDATE
-    TO authenticated
-    USING (public.can_edit_project_block("blockId"))
-    WITH CHECK (public.can_edit_project_block("blockId"));
+    -- ====================================
+    -- BLOCK ARTIFACT TABLE POLICIES
+    -- ====================================
+    CALL create_block_table_policies('BlockArtifact');
     
     -- ====================================
     -- STRING TYPE TABLE POLICIES

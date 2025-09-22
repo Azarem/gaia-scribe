@@ -69,6 +69,9 @@ model User {
   deletedProjectUsers ProjectUser[] @relation("projectUserDeletedBy")
   updatedProjectUsers ProjectUser[] @relation("projectUserUpdatedBy")
   projectUsers        ProjectUser[] @relation("projectUserUser")
+  createdBlockArtfiacts BlockArtifact[] @relation("blockArtifactCreatedBy")
+  updatedBlockArtfiacts BlockArtifact[] @relation("blockArtifactUpdatedBy")
+  deletedBlockArtfiacts BlockArtifact[] @relation("blockArtifactDeletedBy")
 
   createdAt DateTime @default(now())
   createdBy String @db.Uuid
@@ -346,6 +349,7 @@ model Block {
   // Relations
   transforms BlockTransform[]
   parts      BlockPart[]
+  artifact   BlockArtifact?
   
   //Audit Fields
   createdAt     DateTime @default(now())
@@ -360,6 +364,33 @@ model Block {
 
   @@unique([projectId, name])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
+}
+
+model BlockArtifact {
+  id          String  @id @default(cuid())
+
+  // Owner
+  block   Block @relation(fields: [blockId], references: [id])
+  blockId String @unique
+
+  content String
+  meta    Json?
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "blockArtifactCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "blockArtifactDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "blockArtifactUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@index([blockId])
   @@index([createdBy])
   @@index([updatedBy])
   @@index([deletedBy])

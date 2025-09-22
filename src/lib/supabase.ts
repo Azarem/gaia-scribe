@@ -896,6 +896,101 @@ export const db = {
     },
   },
 
+  // Alias for consistency with other naming patterns
+  stringTypes: {
+    async getByProject(projectId: string) {
+      return db.strings.getByProject(projectId)
+    },
+
+    async getById(id: string) {
+      return db.strings.getById(id)
+    },
+
+    async create(stringType: { name: string; delimiter?: string; shiftType?: string; terminator?: number; greedy?: boolean; meta?: any; characterMap?: string[]; projectId: string }, userId: string) {
+      return db.strings.create(stringType, userId)
+    },
+
+    async update(id: string, updates: { name?: string; delimiter?: string; shiftType?: string; terminator?: number; greedy?: boolean; meta?: any; characterMap?: string[] }, userId: string) {
+      return db.strings.update(id, updates, userId)
+    },
+
+    async delete(id: string, userId: string) {
+      return db.strings.delete(id, userId)
+    },
+  },
+
+  // BlockArtifacts
+  blockArtifacts: {
+    async getByBlock(blockId: string) {
+      return supabase
+        .from('BlockArtifact')
+        .select('*')
+        .eq('blockId', blockId)
+        .is('deletedAt', null)
+        .single()
+    },
+
+    async getById(id: string) {
+      return supabase
+        .from('BlockArtifact')
+        .select('*')
+        .eq('id', id)
+        .is('deletedAt', null)
+        .single()
+    },
+
+    async create(artifact: { blockId: string; content: string; meta?: any }, userId: string) {
+      const artifactId = createId()
+      return (supabase as any)
+        .from('BlockArtifact')
+        .insert({
+          id: artifactId,
+          blockId: artifact.blockId,
+          content: artifact.content,
+          meta: artifact.meta,
+          createdBy: userId,
+        })
+        .select()
+        .single()
+    },
+
+    async update(id: string, updates: { content?: string; meta?: any }, userId: string) {
+      return (supabase as any)
+        .from('BlockArtifact')
+        .update({
+          ...updates,
+          updatedBy: userId,
+        })
+        .eq('id', id)
+        .select()
+        .single()
+    },
+
+    async upsert(artifact: { blockId: string; content: string; meta?: any; createdBy: string; updatedBy: string }) {
+      return (supabase as any)
+        .from('BlockArtifact')
+        .upsert({
+          blockId: artifact.blockId,
+          content: artifact.content,
+          meta: artifact.meta,
+          createdBy: artifact.createdBy,
+          updatedBy: artifact.updatedBy,
+        })
+        .select()
+        .single()
+    },
+
+    async delete(id: string, userId: string) {
+      return (supabase as any)
+        .from('BlockArtifact')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: userId,
+        })
+        .eq('id', id)
+    },
+  },
+
   // StringCommands
   stringCommands: {
     async getByStringType(stringTypeId: string) {
