@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Plus, Check, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Check, X, Edit2, Trash2 } from 'lucide-react'
 import DataTable, { type DataTableProps } from './DataTable'
 import { useAuthStore } from '../stores/auth-store'
 import { db } from '../lib/supabase'
@@ -25,9 +25,11 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
   const [partsLoading, setPartsLoading] = useState(false)
   const [partsError, setPartsError] = useState<string | null>(null)
   const [dataReady, setDataReady] = useState(false)
-  const [showAddPartForm, setShowAddPartForm] = useState<{ [blockId: string]: boolean }>({})
   const [addPartFormData, setAddPartFormData] = useState<{ [blockId: string]: Partial<BlockPart> }>({})
   const [partValidationErrors, setPartValidationErrors] = useState<{ [blockId: string]: Record<string, string> }>({})
+  const [editingPartId, setEditingPartId] = useState<string | null>(null)
+  const [editPartFormData, setEditPartFormData] = useState<Partial<BlockPart>>({})
+  const [editPartValidationErrors, setEditPartValidationErrors] = useState<Record<string, string>>({})
 
   // Fetch all BlockParts for the project
   useEffect(() => {
@@ -214,16 +216,55 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     })
   }
 
-  const handleAddPart = (blockId: string) => {
-    setShowAddPartForm(prev => ({ ...prev, [blockId]: true }))
+  const handleCancelAddPart = (blockId: string) => {
     setAddPartFormData(prev => ({ ...prev, [blockId]: {} }))
     setPartValidationErrors(prev => ({ ...prev, [blockId]: {} }))
   }
 
-  const handleCancelAddPart = (blockId: string) => {
-    setShowAddPartForm(prev => ({ ...prev, [blockId]: false }))
-    setAddPartFormData(prev => ({ ...prev, [blockId]: {} }))
-    setPartValidationErrors(prev => ({ ...prev, [blockId]: {} }))
+  const handleEditPart = (part: BlockPart) => {
+    setEditingPartId(part.id)
+    setEditPartFormData({
+      name: part.name,
+      location: part.location,
+      size: part.size,
+      type: part.type,
+      index: part.index
+    })
+    setEditPartValidationErrors({})
+  }
+
+  const handleCancelEditPart = () => {
+    setEditingPartId(null)
+    setEditPartFormData({})
+    setEditPartValidationErrors({})
+  }
+
+  const handleDeletePart = async (partId: string, blockId: string) => {
+    if (!user?.id) return
+
+    if (!confirm('Are you sure you want to delete this part?')) {
+      return
+    }
+
+    try {
+      const { error } = await db.blockParts.delete(partId, user.id)
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      // Update local state
+      setBlockParts(prev => {
+        const updated = { ...prev }
+        if (updated[blockId]) {
+          updated[blockId] = updated[blockId].filter(part => part.id !== partId)
+        }
+        return updated
+      })
+    } catch (err) {
+      console.error('Error deleting part:', err)
+      alert('Failed to delete part. Please try again.')
+    }
   }
 
   const validatePartForm = (blockId: string): boolean => {
@@ -257,6 +298,87 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
 
     setPartValidationErrors(prev => ({ ...prev, [blockId]: errors }))
     return Object.keys(errors).length === 0
+  }
+
+  const validateEditPartForm = (): boolean => {
+    const formData = editPartFormData
+    const errors: Record<string, string> = {}
+
+    // Name validation
+    if (!formData.name?.trim()) {
+      errors.name = 'Name is required'
+    }
+
+    // Location validation (hex)
+    if (formData.location === undefined || formData.location === null) {
+      errors.location = 'Location is required'
+    }
+
+    // Size validation
+    if (!formData.size || formData.size <= 0) {
+      errors.size = 'Size must be a positive number'
+    }
+
+    // Type validation
+    if (!formData.type?.trim()) {
+      errors.type = 'Type is required'
+    }
+
+    // Index validation (optional)
+    if (formData.index !== undefined && formData.index !== null && formData.index < 0) {
+      errors.index = 'Index must be non-negative'
+    }
+
+    setEditPartValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSaveEditPart = async () => {
+    if (!user?.id || !editingPartId || !validateEditPartForm()) {
+      return
+    }
+
+    try {
+      const updates = {
+        name: editPartFormData.name!.trim(),
+        location: editPartFormData.location!,
+        size: editPartFormData.size!,
+        type: editPartFormData.type!.trim(),
+        index: editPartFormData.index || undefined
+      }
+
+      const { data, error } = await db.blockParts.update(editingPartId, updates, user.id)
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      if (data) {
+        // Update local state
+        setBlockParts(prev => {
+          const updated = { ...prev }
+          Object.keys(updated).forEach(blockId => {
+            const partIndex = updated[blockId].findIndex(part => part.id === editingPartId)
+            if (partIndex !== -1) {
+              updated[blockId][partIndex] = data
+              // Re-sort parts by index
+              updated[blockId].sort((a, b) => {
+                const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
+                const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
+                return indexA - indexB
+              })
+            }
+          })
+          return updated
+        })
+
+        // Reset edit state
+        handleCancelEditPart()
+      }
+    } catch (err) {
+      console.error('Error updating part:', err)
+      setEditPartValidationErrors({ name: 'Failed to update part. Please try again.' })
+    }
   }
 
   const handleSaveAddPart = async (blockId: string) => {
@@ -394,6 +516,71 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     )
   }
 
+  const renderEditPartEditableCell = (
+    field: keyof BlockPart,
+    type: 'text' | 'number' | 'hex' = 'text'
+  ) => {
+    const formData = editPartFormData
+    const errors = editPartValidationErrors
+    let value = (formData as any)[field] || ''
+
+    // Handle hex display for location
+    if (field === 'location' && typeof value === 'number') {
+      value = `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
+    }
+
+    const error = errors[field]
+
+    const handleChange = (newValue: string) => {
+      let processedValue: any = newValue
+
+      // Handle hex input for location
+      if (field === 'location') {
+        const hexValue = newValue.replace(/^0x/i, '')
+        if (/^[0-9A-Fa-f]*$/.test(hexValue) && hexValue !== '') {
+          processedValue = parseInt(hexValue, 16)
+        } else if (hexValue === '') {
+          processedValue = null
+        } else {
+          processedValue = newValue // Keep invalid input for validation
+        }
+      } else if (type === 'number') {
+        processedValue = newValue ? Number(newValue) : null
+      }
+
+      setEditPartFormData(prev => ({ ...prev, [field]: processedValue }))
+
+      // Clear validation error when user starts typing
+      if (error) {
+        setEditPartValidationErrors(prev => {
+          const newErrors = { ...prev }
+          delete newErrors[field]
+          return newErrors
+        })
+      }
+    }
+
+    const baseClasses = clsx(
+      'w-full px-2 py-1 text-sm border rounded',
+      error
+        ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+        : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+    )
+
+    return (
+      <div>
+        <input
+          type={type === 'number' ? 'number' : 'text'}
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
+          className={clsx(baseClasses, field === 'location' && 'font-mono')}
+          min={type === 'number' ? 0 : undefined}
+        />
+        {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
+      </div>
+    )
+  }
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -515,16 +702,7 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
 
           return (
             <div className="px-6 py-2 bg-gray-50">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-gray-700">Block Parts:</div>
-                <button
-                  onClick={() => handleAddPart(block.id)}
-                  className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Part
-                </button>
-              </div>
+              <div className="text-sm font-medium text-gray-700 mb-3">Block Parts:</div>
 
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -540,77 +718,122 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {/* Add Form Row - Show when no parts or when add form is active */}
-                    {(parts.length === 0 || showAddPartForm[block.id]) && (
-                      <tr className="bg-blue-50">
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {renderPartEditableCell(block.id, 'name', 'text')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {renderPartEditableCell(block.id, 'location', 'hex')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {renderPartEditableCell(block.id, 'size', 'number')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-400">
-                          {/* END address - calculated automatically */}
-                          —
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {renderPartEditableCell(block.id, 'type', 'text')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {renderPartEditableCell(block.id, 'index', 'number')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex items-center justify-end space-x-2">
-                            <button
-                              onClick={() => handleSaveAddPart(block.id)}
-                              className="text-green-600 hover:text-green-900"
-                              title="Save"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleCancelAddPart(block.id)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Cancel"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-
                     {/* Existing Parts */}
-                    {parts.map((part, index) => (
-                      <tr key={part.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{part.name}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
-                          0x{part.location.toString(16).toUpperCase().padStart(6, '0')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{part.size}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
-                          0x{(part.location + part.size).toString(16).toUpperCase().padStart(6, '0')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{part.type}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{part.index || '-'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
-                          {/* Future: Add edit/delete actions here */}
-                          —
-                        </td>
-                      </tr>
-                    ))}
+                    {parts.map((part, index) => {
+                      const isEditing = editingPartId === part.id
+                      return (
+                        <tr key={part.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {isEditing ? renderEditPartEditableCell('name', 'text') : (
+                              <span className="text-sm text-gray-900">{part.name}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {isEditing ? renderEditPartEditableCell('location', 'hex') : (
+                              <span className="text-sm font-mono text-gray-900">
+                                0x{part.location.toString(16).toUpperCase().padStart(6, '0')}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {isEditing ? renderEditPartEditableCell('size', 'number') : (
+                              <span className="text-sm text-gray-900">{part.size}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
+                            0x{(part.location + part.size).toString(16).toUpperCase().padStart(6, '0')}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {isEditing ? renderEditPartEditableCell('type', 'text') : (
+                              <span className="text-sm text-gray-900">{part.type}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {isEditing ? renderEditPartEditableCell('index', 'number') : (
+                              <span className="text-sm text-gray-900">{part.index || '-'}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
+                            {isEditing ? (
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={handleSaveEditPart}
+                                  className="text-green-600 hover:text-green-900"
+                                  title="Save"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={handleCancelEditPart}
+                                  className="text-red-600 hover:text-red-900"
+                                  title="Cancel"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={() => handleEditPart(part)}
+                                  className="text-blue-600 hover:text-blue-900"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePart(part.id, part.blockId)}
+                                  className="text-red-600 hover:text-red-900"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
 
-                    {/* Empty state message when no parts and no add form */}
-                    {parts.length === 0 && !showAddPartForm[block.id] && (
-                      <tr>
-                        <td colSpan={7} className="px-3 py-8 text-center text-gray-500 text-sm">
-                          No parts found for this block. Click "Add Part" to create the first part.
-                        </td>
-                      </tr>
-                    )}
+                    {/* Always show Add Form Row at the bottom */}
+                    <tr className="bg-blue-50">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {renderPartEditableCell(block.id, 'name', 'text')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {renderPartEditableCell(block.id, 'location', 'hex')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {renderPartEditableCell(block.id, 'size', 'number')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-400">
+                        {/* END address - calculated automatically */}
+                        —
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {renderPartEditableCell(block.id, 'type', 'text')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {renderPartEditableCell(block.id, 'index', 'number')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => handleSaveAddPart(block.id)}
+                            className="text-green-600 hover:text-green-900"
+                            title="Save"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleCancelAddPart(block.id)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Clear"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
