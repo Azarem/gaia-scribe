@@ -4,7 +4,7 @@ import Modal from './Modal'
 import FileUpload from './FileUpload'
 import { db } from '../lib/supabase'
 import { parseRomHeader, generateProjectName, validateRomFile, type RomHeaderInfo } from '../lib/rom-parser'
-import { Plus, Info, CheckCircle, AlertCircle, Gamepad2 } from 'lucide-react'
+import { Plus, CheckCircle, AlertCircle, Gamepad2 } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 import clsx from 'clsx'
 
