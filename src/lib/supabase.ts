@@ -584,6 +584,7 @@ export const db = {
         .eq('projectId', projectId)
         .is('deletedAt', null)
         .order('name', { ascending: true })
+        .limit(3000)
     },
 
     async getById(id: string) {
@@ -649,6 +650,7 @@ export const db = {
         .eq('projectId', projectId)
         .is('deletedAt', null)
         .order('name', { ascending: true })
+        .limit(3000)
     },
 
     async getById(id: string) {
@@ -763,25 +765,13 @@ export const db = {
   // BlockParts
   blockParts: {
     async getByProject(projectId: string) {
-      // First get all blocks for the project
-      const { data: blocks } = await supabase
-        .from('Block')
-        .select('id')
-        .eq('projectId', projectId)
-        .is('deletedAt', null)
-
-      if (!blocks || blocks.length === 0) {
-        return { data: [], error: null }
-      }
-
-      const blockIds = blocks.map(block => block.id)
-
       return supabase
         .from('BlockPart')
-        .select('*')
-        .in('blockId', blockIds)
+        .select('*,block:Block!inner(id,projectId,deletedAt)')
+        .eq('block.projectId', projectId)
         .is('deletedAt', null)
-        .order('index', { ascending: true })
+        .is('block.deletedAt', null)
+        .limit(8000)
     },
 
     async getByBlock(blockId: string) {
@@ -1041,6 +1031,7 @@ export const db = {
         .eq('projectId', projectId)
         .is('deletedAt', null)
         .order('location', { ascending: true })
+        .limit(3000)
     },
 
     async getById(id: string) {
@@ -1157,6 +1148,7 @@ export const db = {
         .eq('projectId', projectId)
         .is('deletedAt', null)
         .order('address', { ascending: true })
+        .limit(2000)
     },
 
     async getById(id: string) {
