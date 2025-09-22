@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/auth-store'
 import { signOut, supabase, db } from '../lib/supabase'
 import { LogOut, User, Plus, Download, Calendar, Eye, Users as UsersIcon } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
-import ComingSoonModal from '../components/ComingSoonModal'
+import CreateProjectModal from '../components/CreateProjectModal'
 import ImportProjectModal from '../components/ImportProjectModal'
 import UserSyncStatus from '../components/UserSyncStatus'
 import ConnectionStatus from '../components/ConnectionStatus'
@@ -19,7 +19,7 @@ export default function DashboardPage() {
   const { user, session, loading: authLoading, initialized } = useAuthStore()
   const [projects, setProjects] = useState<ProjectWithCreator[]>([])
   const [loading, setLoading] = useState(true)
-  const [showComingSoon, setShowComingSoon] = useState(false)
+  const [showCreateProject, setShowCreateProject] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
 
   // Load user's projects
@@ -180,6 +180,11 @@ export default function DashboardPage() {
     setProjects(prev => [newProject as ProjectWithCreator, ...prev])
   }
 
+  const handleProjectCreated = (newProject: ScribeProject) => {
+    // Add the created project to the list
+    setProjects(prev => [newProject as ProjectWithCreator, ...prev])
+  }
+
   const handleProjectClick = (projectId: string) => {
     navigate(`/projects/${projectId}`)
   }
@@ -234,7 +239,7 @@ export default function DashboardPage() {
           {/* Action Buttons */}
           <div className="mb-8 flex space-x-4">
             <button
-              onClick={() => setShowComingSoon(true)}
+              onClick={() => setShowCreateProject(true)}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -264,7 +269,7 @@ export default function DashboardPage() {
               </p>
               <div className="flex justify-center space-x-4">
                 <button
-                  onClick={() => setShowComingSoon(true)}
+                  onClick={() => setShowCreateProject(true)}
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -349,10 +354,10 @@ export default function DashboardPage() {
       </main>
 
       {/* Modals */}
-      <ComingSoonModal
-        isOpen={showComingSoon}
-        onClose={() => setShowComingSoon(false)}
-        feature="Create New Project"
+      <CreateProjectModal
+        isOpen={showCreateProject}
+        onClose={() => setShowCreateProject(false)}
+        onProjectCreated={handleProjectCreated}
       />
 
       <ImportProjectModal

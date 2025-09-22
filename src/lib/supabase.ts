@@ -115,24 +115,114 @@ export const clearWorkingClientCache = () => {
 const EXTERNAL_SUPABASE_URL = 'https://adwobxutnpmjbmhdxrzx.supabase.co'
 const EXTERNAL_SUPABASE_KEY = 'sb_publishable_uBZdKmgGql5sDNGpj1DVMQ_opZ2V4kV'
 
-// Auth helpers with improved error handling and logging
+// Auth helpers with improved error handling and automatic account creation
 export const signInWithEmail = async (email: string, password: string) => {
   try {
     console.log('Attempting email sign-in for:', email)
-    const { data, error } = await supabase.auth.signInWithPassword({
+
+    // First, try to sign in with existing credentials
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
-    
+
+    // If sign-in successful, return the result
+    if (signInData?.user && !signInError) {
+      console.log('Email sign-in successful for existing user')
+      return { data: signInData, error: null }
+    }
+
+    // Check if the error indicates invalid credentials (user doesn't exist)
+    if (signInError && signInError.message.includes('Invalid login credentials')) {
+      console.log('User not found, attempting to create new account for:', email)
+
+      // Try to create a new account
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Set email redirect for confirmation
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        }
+      })
+
+      if (signUpError) {
+        console.error('Account creation failed:', signUpError.message)
+
+        // If account creation fails due to user already existing, try sign-in again
+        // This can happen in race conditions or if the user was created between attempts
+        if (signUpError.message.includes('User already registered')) {
+          console.log('User was created between attempts, retrying sign-in...')
+          const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+
+          if (retryError) {
+            console.error('Retry sign-in failed:', retryError.message)
+            return { data: null, error: retryError }
+          }
+
+          console.log('Retry sign-in successful')
+          return { data: retryData, error: null }
+        }
+
+        // Return the sign-up error if it's not a "user already exists" error
+        return { data: null, error: signUpError }
+      }
+
+      // Account creation successful
+      if (signUpData?.user) {
+        // Check if the user is immediately confirmed (no email confirmation required)
+        if (signUpData.session) {
+          console.log('New account created and signed in successfully')
+          return { data: signUpData, error: null }
+        } else {
+          // User created but needs email confirmation
+          console.log('Account created successfully. Please check your email to confirm your account.')
+          return {
+            data: null,
+            error: new Error('Account created successfully. Please check your email to confirm your account before signing in.')
+          }
+        }
+      }
+
+      // This shouldn't happen, but handle the case where signUp succeeds but no user is returned
+      console.warn('Account creation succeeded but no user data returned')
+      return { data: signUpData, error: null }
+    }
+
+    // For any other sign-in errors, return them as-is
+    console.error('Email sign-in error:', signInError?.message)
+    return { data: null, error: signInError }
+
+  } catch (error) {
+    console.error('Email authentication exception:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+// Explicit sign-up function for new user registration
+export const signUpWithEmail = async (email: string, password: string) => {
+  try {
+    console.log('Attempting to create new account for:', email)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      }
+    })
+
     if (error) {
-      console.error('Email sign-in error:', error.message)
+      console.error('Account creation error:', error.message)
       return { data: null, error }
     }
-    
-    console.log('Email sign-in successful')
+
+    console.log('Account creation successful')
     return { data, error: null }
   } catch (error) {
-    console.error('Email sign-in exception:', error)
+    console.error('Account creation exception:', error)
     return { data: null, error: error as Error }
   }
 }
@@ -148,12 +238,12 @@ export const signInWithGitHub = async () => {
         scopes: 'read:user user:email'
       },
     })
-    
+
     if (error) {
       console.error('GitHub sign-in error:', error.message)
       return { data: null, error }
     }
-    
+
     console.log('GitHub sign-in initiated')
     return { data, error: null }
   } catch (error) {
