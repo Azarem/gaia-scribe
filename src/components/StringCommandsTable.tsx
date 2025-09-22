@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Check, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { StringCommand } from '@prisma/client'
@@ -24,12 +24,7 @@ export default function StringCommandsTable({
   const [addFormData, setAddFormData] = useState<Partial<StringCommand & { typesString?: string; partsString?: string }>>({})
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Load commands
-  useEffect(() => {
-    loadCommands()
-  }, [stringTypeId])
-
-  const loadCommands = async () => {
+  const loadCommands = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -48,7 +43,12 @@ export default function StringCommandsTable({
     } finally {
       setLoading(false)
     }
-  }
+  }, [stringTypeId])
+
+  // Load commands
+  useEffect(() => {
+    loadCommands()
+  }, [loadCommands])
 
   const handleAdd = async () => {
     if (!user?.id) return

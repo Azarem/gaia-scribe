@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import DataTable, { type DataTableProps } from './DataTable'
 import { db } from '../lib/supabase'
@@ -178,19 +178,19 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
     return blocksByBank[currentBank] || []
   }, [blocksByBank, currentBank])
 
-  const handlePreviousBank = () => {
+  const handlePreviousBank = useCallback(() => {
     const currentIndex = availableBanks.indexOf(currentBank)
     if (currentIndex > 0) {
       setCurrentBank(availableBanks[currentIndex - 1])
     }
-  }
+  }, [availableBanks, currentBank])
 
-  const handleNextBank = () => {
+  const handleNextBank = useCallback(() => {
     const currentIndex = availableBanks.indexOf(currentBank)
     if (currentIndex < availableBanks.length - 1) {
       setCurrentBank(availableBanks[currentIndex + 1])
     }
-  }
+  }, [availableBanks, currentBank])
 
   const handleBankSelect = (bank: number) => {
     setCurrentBank(bank)
@@ -224,7 +224,7 @@ export default function BlocksDataTable({ data, projectId, columns, ...props }: 
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [availableBanks, currentBank])
+  }, [availableBanks, currentBank, handlePreviousBank, handleNextBank])
 
   // Enhanced columns with expand functionality
   const enhancedColumns = useMemo(() => {

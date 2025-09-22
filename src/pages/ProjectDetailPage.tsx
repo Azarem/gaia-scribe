@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../stores/auth-store'
 import { db } from '../lib/supabase'
 import { Calendar, Edit, Trash2, ArrowLeft, Globe, Lock } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
@@ -16,7 +15,7 @@ import clsx from 'clsx'
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+
   const [project, setProject] = useState<ScribeProject | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -62,8 +61,6 @@ export default function ProjectDetailPage() {
 
     loadProject()
   }, [id])
-
-  const isOwner = Boolean(user && project && user.id === project.createdBy)
 
   // Use permission-based checks for UI controls
   const showManagementActions = canManage && !permissionsLoading

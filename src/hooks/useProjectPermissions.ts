@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { checkProjectPermissions, projectPermissions } from '../lib/permissions'
+import { projectPermissions } from '../lib/permissions'
 
 export interface ProjectPermissionsState {
   canView: boolean

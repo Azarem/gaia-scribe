@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth-store'
 import { db } from '../lib/supabase'
@@ -57,7 +57,7 @@ export default function ProjectSectionPage() {
   }
 
   // Get database methods based on section
-  const getDbMethods = () => {
+  const getDbMethods = useCallback(() => {
     switch (section) {
       case 'files': return db.files
       case 'blocks': return db.blocks
@@ -70,7 +70,7 @@ export default function ProjectSectionPage() {
       case 'overrides': return db.overrides
       default: return null
     }
-  }
+  }, [section])
 
   // Load project details
   useEffect(() => {
@@ -135,7 +135,7 @@ export default function ProjectSectionPage() {
     }
 
     loadSectionData()
-  }, [id, section, sectionConfig])
+  }, [id, section, sectionConfig, getDbMethods])
 
   // CRUD Operations
   const handleAdd = async (newItem: any) => {
@@ -360,7 +360,7 @@ export default function ProjectSectionPage() {
         ) : section === 'blocks' ? (
           <BlocksDataTable
             data={sectionData}
-            projectId={id!}
+            projectId={id || ''}
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}

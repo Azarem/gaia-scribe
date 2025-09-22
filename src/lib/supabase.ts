@@ -368,7 +368,7 @@ export const db = {
           projectId: projectUser.projectId,
           userId: projectUser.userId,
           role: projectUser.role || 'contributor',
-          createdBy: createdBy,
+          createdBy,
         })
         .select(`
           *,
@@ -417,7 +417,7 @@ export const db = {
         .from('ProjectUser')
         .update({
           deletedAt: new Date().toISOString(),
-          deletedBy: deletedBy,
+          deletedBy,
         })
         .eq('projectId', projectId)
         .eq('userId', userId)

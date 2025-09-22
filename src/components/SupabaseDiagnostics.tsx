@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase, createFreshSupabaseClient } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth-store'
 
@@ -8,11 +8,7 @@ export default function SupabaseDiagnostics() {
   const [testResults, setTestResults] = useState<any>({})
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    runDiagnostics()
-  }, [user, session])
-
-  const runDiagnostics = async () => {
+  const runDiagnostics = useCallback(async () => {
     console.log('🔍 Running Supabase diagnostics...')
 
     const results: any = {
@@ -54,7 +50,11 @@ export default function SupabaseDiagnostics() {
 
     setDiagnostics(results)
     console.log('🔍 Diagnostics results:', results)
-  }
+  }, [user, session])
+
+  useEffect(() => {
+    runDiagnostics()
+  }, [runDiagnostics])
 
   const testBasicConnectivity = async () => {
     setLoading(true)

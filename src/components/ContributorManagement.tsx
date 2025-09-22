@@ -42,12 +42,7 @@ export default function ContributorManagement({ project, canManage }: Contributo
   const [addingUser, setAddingUser] = useState<string | null>(null)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Load contributors
-  useEffect(() => {
-    loadContributors()
-  }, [project.id])
-
-  const loadContributors = async () => {
+  const loadContributors = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -79,7 +74,12 @@ export default function ContributorManagement({ project, canManage }: Contributo
     } finally {
       setLoading(false)
     }
-  }
+  }, [project.id])
+
+  // Load contributors
+  useEffect(() => {
+    loadContributors()
+  }, [loadContributors])
 
   // Search users by name or email with debouncing
   const searchUsers = useCallback(async (query: string) => {
@@ -155,7 +155,7 @@ export default function ContributorManagement({ project, canManage }: Contributo
       const { data, error } = await db.projectUsers.create(
         {
           projectId: project.id,
-          userId: userId,
+          userId,
           role: 'contributor'
         },
         user.id

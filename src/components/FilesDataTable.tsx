@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import DataTable, { type DataTableProps } from './DataTable'
 import type { File } from '@prisma/client'
@@ -58,19 +58,19 @@ export default function FilesDataTable({ data, ...props }: FilesDataTableProps) 
     return filesByBank[currentBank] || []
   }, [filesByBank, currentBank])
 
-  const handlePreviousBank = () => {
+  const handlePreviousBank = useCallback(() => {
     const currentIndex = availableBanks.indexOf(currentBank)
     if (currentIndex > 0) {
       setCurrentBank(availableBanks[currentIndex - 1])
     }
-  }
+  }, [availableBanks, currentBank])
 
-  const handleNextBank = () => {
+  const handleNextBank = useCallback(() => {
     const currentIndex = availableBanks.indexOf(currentBank)
     if (currentIndex < availableBanks.length - 1) {
       setCurrentBank(availableBanks[currentIndex + 1])
     }
-  }
+  }, [availableBanks, currentBank])
 
   const handleBankSelect = (bank: number) => {
     setCurrentBank(bank)
@@ -92,7 +92,7 @@ export default function FilesDataTable({ data, ...props }: FilesDataTableProps) 
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [availableBanks, currentBank])
+  }, [availableBanks, currentBank, handlePreviousBank, handleNextBank])
 
   if (availableBanks.length === 0) {
     return (

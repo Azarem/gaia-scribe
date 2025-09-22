@@ -169,7 +169,7 @@ export default function DashboardPage() {
         supabase.removeChannel(channelRef)
       }
     }
-    }, [user?.id, initialized, authLoading])
+    }, [user, session, initialized, authLoading])
 
   const handleSignOut = async () => {
     await signOut()
