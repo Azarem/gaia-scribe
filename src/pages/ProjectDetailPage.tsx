@@ -9,6 +9,7 @@ import DeleteProjectModal from '../components/DeleteProjectModal'
 import SectionCard from '../components/SectionCard'
 import ContributorManagement from '../components/ContributorManagement'
 import { useProjectSectionCounts } from '../hooks/useProjectSectionCounts'
+import { useProjectPermissions } from '../hooks/useProjectPermissions'
 import { PROJECT_SECTIONS } from '../lib/project-sections'
 import clsx from 'clsx'
 
@@ -24,6 +25,9 @@ export default function ProjectDetailPage() {
 
   // Fetch section counts
   const { counts, loading: countsLoading } = useProjectSectionCounts(id)
+
+  // Check permissions
+  const { canManage, loading: permissionsLoading } = useProjectPermissions(id || null)
 
   // Load project details
   useEffect(() => {
@@ -60,6 +64,9 @@ export default function ProjectDetailPage() {
   }, [id])
 
   const isOwner = Boolean(user && project && user.id === project.createdBy)
+
+  // Use permission-based checks for UI controls
+  const showManagementActions = canManage && !permissionsLoading
 
   const handleBack = () => {
     navigate('/dashboard')
@@ -150,8 +157,8 @@ export default function ProjectDetailPage() {
               </div>
             </div>
 
-            {/* Owner Actions */}
-            {isOwner && (
+            {/* Management Actions */}
+            {showManagementActions && (
               <div className="flex items-center space-x-3">
                 <button
                   onClick={handleEdit}
@@ -201,7 +208,7 @@ export default function ProjectDetailPage() {
 
         {/* Contributors Section */}
         <div className="mb-8">
-          <ContributorManagement project={project} isOwner={isOwner} />
+          <ContributorManagement project={project} canManage={showManagementActions} />
         </div>
 
         {/* Project Information */}

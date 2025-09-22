@@ -5,6 +5,7 @@ import { db } from '../lib/supabase'
 import { ArrowLeft, Home } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 import { getSectionByRoute } from '../lib/project-sections'
+import { useCanEditProject } from '../hooks/useProjectPermissions'
 import DataTable from '../components/DataTable'
 import FilesDataTable from '../components/FilesDataTable'
 import BlocksDataTable from '../components/BlocksDataTable'
@@ -32,6 +33,9 @@ export default function ProjectSectionPage() {
   const [sectionData, setSectionData] = useState<any[]>([])
   const [sectionLoading, setSectionLoading] = useState(false)
   const [sectionError, setSectionError] = useState<string | null>(null)
+
+  // Check edit permissions
+  const { canEdit, loading: permissionsLoading } = useCanEditProject(id || null)
 
   // Get section configuration
   const sectionConfig = getSectionByRoute(section || '')
@@ -345,9 +349,9 @@ export default function ProjectSectionPage() {
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
-            onAdd={handleAdd}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
+            onAdd={canEdit && !permissionsLoading ? handleAdd : undefined}
+            onEdit={canEdit && !permissionsLoading ? handleEdit : undefined}
+            onDelete={canEdit && !permissionsLoading ? handleDelete : undefined}
             onRefresh={handleRefresh}
             searchPlaceholder={`Search ${sectionConfig.name.toLowerCase()}...`}
             addButtonText={`Add ${sectionConfig.name.slice(0, -1)}`} // Remove 's' from plural
@@ -360,9 +364,9 @@ export default function ProjectSectionPage() {
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
-            onAdd={handleAdd}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
+            onAdd={canEdit && !permissionsLoading ? handleAdd : undefined}
+            onEdit={canEdit && !permissionsLoading ? handleEdit : undefined}
+            onDelete={canEdit && !permissionsLoading ? handleDelete : undefined}
             onRefresh={handleRefresh}
             searchPlaceholder={`Search ${sectionConfig.name.toLowerCase()}...`}
             addButtonText={`Add ${sectionConfig.name.slice(0, -1)}`} // Remove 's' from plural
@@ -374,9 +378,9 @@ export default function ProjectSectionPage() {
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
-            onAdd={handleAdd}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
+            onAdd={canEdit && !permissionsLoading ? handleAdd : undefined}
+            onEdit={canEdit && !permissionsLoading ? handleEdit : undefined}
+            onDelete={canEdit && !permissionsLoading ? handleDelete : undefined}
             onRefresh={handleRefresh}
             searchPlaceholder={`Search ${sectionConfig.name.toLowerCase()}...`}
             addButtonText={`Add ${sectionConfig.name.slice(0, -1)}`} // Remove 's' from plural
@@ -388,9 +392,9 @@ export default function ProjectSectionPage() {
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}
-            onAdd={handleAdd}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
+            onAdd={canEdit && !permissionsLoading ? handleAdd : undefined}
+            onEdit={canEdit && !permissionsLoading ? handleEdit : undefined}
+            onDelete={canEdit && !permissionsLoading ? handleDelete : undefined}
             onRefresh={handleRefresh}
             searchPlaceholder={`Search ${sectionConfig.name.toLowerCase()}...`}
             addButtonText={`Add ${sectionConfig.name.slice(0, -1)}`} // Remove 's' from plural

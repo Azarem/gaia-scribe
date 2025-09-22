@@ -27,10 +27,10 @@ interface User {
 
 interface ContributorManagementProps {
   project: ScribeProject
-  isOwner: boolean
+  canManage: boolean
 }
 
-export default function ContributorManagement({ project, isOwner }: ContributorManagementProps) {
+export default function ContributorManagement({ project, canManage }: ContributorManagementProps) {
   const { user } = useAuthStore()
   const [contributors, setContributors] = useState<ProjectUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -203,7 +203,7 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
   }
 
   const canRemoveContributor = (contributor: ProjectUser) => {
-    return isOwner || contributor.userId === user?.id
+    return canManage || contributor.userId === user?.id
   }
 
   if (loading) {
@@ -234,7 +234,7 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
             ({contributors.length})
           </span>
         </div>
-        {isOwner && (
+        {canManage && (
           <button
             onClick={() => setShowAddModal(true)}
             className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -256,7 +256,7 @@ export default function ContributorManagement({ project, isOwner }: ContributorM
           <Users className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No contributors</h3>
           <p className="mt-1 text-sm text-gray-500">
-            {isOwner 
+            {canManage
               ? "Add contributors to collaborate on this project."
               : "This project doesn't have any contributors yet."
             }
