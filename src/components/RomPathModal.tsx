@@ -73,7 +73,7 @@ class RomFileManager {
 
       const metadata: RomFileMetadata = JSON.parse(saved)
       return { name: metadata.name, size: metadata.size }
-    } catch (error) {
+    } catch (_error) {
       return null
     }
   }
@@ -154,7 +154,7 @@ export default function RomPathModal({
 
       setSelectedFile(file)
       setFileData(data)
-    } catch (error) {
+    } catch (_error) {
       setError('Failed to read the selected file. Please try again.')
       setSelectedFile(null)
       setFileData(null)

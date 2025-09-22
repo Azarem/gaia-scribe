@@ -371,10 +371,10 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
     try {
       const updates = {
-        name: editPartFormData.name!.trim(),
-        location: editPartFormData.location!,
-        size: editPartFormData.size!,
-        type: editPartFormData.type!.trim(),
+        name: editPartFormData.name?.trim() || '',
+        location: editPartFormData.location ?? 0,
+        size: editPartFormData.size ?? 0,
+        type: editPartFormData.type?.trim() || '',
         index: editPartFormData.index || undefined
       }
 
@@ -422,10 +422,10 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
     try {
       const partData = {
-        name: formData.name!.trim(),
-        location: formData.location!,
-        size: formData.size!,
-        type: formData.type!.trim(),
+        name: formData.name?.trim() || '',
+        location: formData.location ?? 0,
+        size: formData.size ?? 0,
+        type: formData.type?.trim() || '',
         index: formData.index || undefined,
         blockId
       }
@@ -657,7 +657,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
   }
 
   // Notification helpers
-  const showNotification = (
+  const showNotification = useCallback((
     type: 'success' | 'error' | 'warning' | 'info',
     title: string,
     message: string,
@@ -674,7 +674,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       showRetry,
       retryAction
     })
-  }
+  }, [])
 
   const hideNotification = () => {
     setNotification(prev => ({ ...prev, show: false }))
@@ -738,7 +738,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
   }
 
   // Artifact viewing functionality
-  const handleViewArtifact = (block: Block) => {
+  const handleViewArtifact = useCallback((block: Block) => {
     try {
       setSelectedBlock(block)
       setShowArtifactModal(true)
@@ -751,7 +751,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
         [error instanceof Error ? error.message : 'Unknown error']
       )
     }
-  }
+  }, [showNotification])
 
   const handleCloseArtifactModal = () => {
     setShowArtifactModal(false)
@@ -800,7 +800,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
       return col
     })
-  }, [columns, expandedBlocks])
+  }, [columns, expandedBlocks, handleViewArtifact])
 
   if (availableBanks.length === 0) {
     return (

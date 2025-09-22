@@ -91,9 +91,9 @@ export class BuildOrchestrator {
             block.textData = blockWriter.generateAsm(block)
           }
           
-          if (block.textData && block.name) {
+          if (block.textData && block.name && block.id) {
             result.artifacts.push({
-              blockId: block.id!,
+              blockId: block.id,
               blockName: block.name,
               content: block.textData
             })

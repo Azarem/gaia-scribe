@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Modal from './Modal'
 import { Code, AlertCircle, Loader } from 'lucide-react'
 import { db } from '../lib/supabase'
@@ -19,17 +19,7 @@ export default function BlockArtifactModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Load artifact when modal opens and block changes
-  useEffect(() => {
-    if (isOpen && block) {
-      loadArtifact()
-    } else {
-      setArtifact(null)
-      setError(null)
-    }
-  }, [isOpen, block])
-
-  const loadArtifact = async () => {
+  const loadArtifact = useCallback(async () => {
     if (!block) return
 
     setLoading(true)
@@ -37,7 +27,7 @@ export default function BlockArtifactModal({
 
     try {
       const { data, error: fetchError } = await db.blockArtifacts.getByBlock(block.id)
-      
+
       if (fetchError) {
         if (fetchError.code === 'PGRST116') {
           // No artifact found
@@ -54,7 +44,17 @@ export default function BlockArtifactModal({
     } finally {
       setLoading(false)
     }
-  }
+  }, [block])
+
+  // Load artifact when modal opens and block changes
+  useEffect(() => {
+    if (isOpen && block) {
+      loadArtifact()
+    } else {
+      setArtifact(null)
+      setError(null)
+    }
+  }, [isOpen, block, loadArtifact])
 
   const handleClose = () => {
     setArtifact(null)
