@@ -10,7 +10,7 @@
  */
 
 import { BlockReader, BlockWriter } from '@gaialabs/core'
-import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbRootUtils, DbStringType, DbStruct, MemberType } from '@gaialabs/shared'
+import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbRootUtils, DbStringType, DbStruct, MemberType, RomProcessingConstants } from '@gaialabs/shared'
 import { type DbRoot, OpCode } from '@gaialabs/shared'
 import { db } from './supabase'
 import { useAuthStore } from '../stores/auth-store'
@@ -312,9 +312,10 @@ export class BuildOrchestrator {
       if (cop.code !== null) {
         result[cop.code] = {
           code: cop.code,
-          mnemonic: cop.mnemonic,
+          mnem: cop.mnemonic,
           parts: cop.parts || [],
-          halt: cop.halt || false
+          halt: cop.halt,
+          size: RomProcessingConstants.getSize(cop.parts)
         }
       }
     })
@@ -445,20 +446,25 @@ export class BuildOrchestrator {
     structs.forEach(struct => {
       result[struct.name] = {
         name: struct.name,
-        types: struct.types || [],
-        delimiter: struct.delimiter || 0,
-        discriminator: struct.discriminator || 0,
-        parent: struct.parent || '',
+        types: struct.types,
+        delimiter: struct.delimiter ?? undefined,
+        discriminator: struct.discriminator ?? undefined,
+        parent: struct.parent ?? undefined,
       }
     })
     return result
   }
 
   private convertInstructionSetToDbFormat(addressingModes: AddressingMode[], instructionGroups: InstructionGroup[], instructionCodes: InstructionCode[]) {
-    const addrLookup: Record<string, AddressingMode> = {};
+    const addrLookup: Record<string, any> = {};
     const addrMap: Record<string, string> = {};
     addressingModes.forEach(mode => {
-      addrLookup[mode.name] = mode;
+      addrLookup[mode.name] = {
+        size: mode.size,
+        shorthand: mode.code,
+        parseRegex: mode.pattern,
+        formatString: mode.format,
+      };
       addrMap[mode.id] = mode.name;
     });
     const groupMap: Record<string, string> = {};
