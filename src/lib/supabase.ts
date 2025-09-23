@@ -1673,7 +1673,38 @@ export const db = {
         .from('AddressingMode')
         .insert(addressingModesToInsert)
         .select()
-    }
+    },
+
+    async getById(id: string) {
+      return supabase
+        .from('AddressingMode')
+        .select('*')
+        .eq('id', id)
+        .is('deletedAt', null)
+        .single()
+    },
+
+    async update(id: string, updates: { name?: string; code?: string; size?: number; format?: string; pattern?: string; meta?: any }, userId: string) {
+      return (supabase as any)
+        .from('AddressingMode')
+        .update({
+          ...updates,
+          updatedBy: userId,
+        })
+        .eq('id', id)
+        .select()
+        .single()
+    },
+
+    async delete(id: string, userId: string) {
+      return (supabase as any)
+        .from('AddressingMode')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: userId,
+        })
+        .eq('id', id)
+    },
   },
 
   // Instruction Groups
@@ -1711,7 +1742,38 @@ export const db = {
         .from('InstructionGroup')
         .insert(instructionGroupsToInsert)
         .select()
-    }
+    },
+
+    async getById(id: string) {
+      return supabase
+        .from('InstructionGroup')
+        .select('*')
+        .eq('id', id)
+        .is('deletedAt', null)
+        .single()
+    },
+
+    async update(id: string, updates: { name?: string; meta?: any }, userId: string) {
+      return (supabase as any)
+        .from('InstructionGroup')
+        .update({
+          ...updates,
+          updatedBy: userId,
+        })
+        .eq('id', id)
+        .select()
+        .single()
+    },
+
+    async delete(id: string, userId: string) {
+      return (supabase as any)
+        .from('InstructionGroup')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: userId,
+        })
+        .eq('id', id)
+    },
   },
 
   // Instruction Codes
@@ -1762,7 +1824,38 @@ export const db = {
         .from('InstructionCode')
         .insert(instructionCodesToInsert)
         .select()
-    }
+    },
+
+    async getById(id: string) {
+      return supabase
+        .from('InstructionCode')
+        .select('*, group:InstructionGroup!inner(id, name), mode:AddressingMode!inner(id, name, code)')
+        .eq('id', id)
+        .is('deletedAt', null)
+        .single()
+    },
+
+    async update(id: string, updates: { code?: number; cycles?: number; meta?: any; groupId?: string; modeId?: string }, userId: string) {
+      return (supabase as any)
+        .from('InstructionCode')
+        .update({
+          ...updates,
+          updatedBy: userId,
+        })
+        .eq('id', id)
+        .select()
+        .single()
+    },
+
+    async delete(id: string, userId: string) {
+      return (supabase as any)
+        .from('InstructionCode')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: userId,
+        })
+        .eq('id', id)
+    },
   },
 
   // Vectors
@@ -1800,7 +1893,38 @@ export const db = {
         .from('Vector')
         .insert(vectorsToInsert)
         .select()
-    }
+    },
+
+    async getById(id: string) {
+      return supabase
+        .from('Vector')
+        .select('*')
+        .eq('id', id)
+        .is('deletedAt', null)
+        .single()
+    },
+
+    async update(id: string, updates: { name?: string; address?: number; isEntry?: boolean; meta?: any }, userId: string) {
+      return (supabase as any)
+        .from('Vector')
+        .update({
+          ...updates,
+          updatedBy: userId,
+        })
+        .eq('id', id)
+        .select()
+        .single()
+    },
+
+    async delete(id: string, userId: string) {
+      return (supabase as any)
+        .from('Vector')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: userId,
+        })
+        .eq('id', id)
+    },
   },
 
   // External project search (for importing from public API via HTTP)

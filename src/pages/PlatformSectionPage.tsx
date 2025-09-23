@@ -5,47 +5,83 @@ import { ArrowLeft, Home, Cpu } from 'lucide-react'
 import type { Platform } from '@prisma/client'
 import { getPlatformSectionByRoute } from '../lib/platform-sections'
 import Breadcrumbs from '../components/Breadcrumbs'
+import AddressingModesDataTable from '../components/AddressingModesDataTable'
+import InstructionSetsDataTable from '../components/InstructionSetsDataTable'
+import VectorsDataTable from '../components/VectorsDataTable'
 
 // Component to display platform section content
 interface PlatformSectionContentProps {
   sectionKey: string
   sectionName: string
-  data: any
   platform: Platform
 }
 
-function PlatformSectionContent({ sectionKey, sectionName, data, platform }: PlatformSectionContentProps) {
-  if (!data) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-gray-500">No data available for {sectionName.toLowerCase()}.</p>
-      </div>
-    )
-  }
-
-  // Handle different section types
+function PlatformSectionContent({ sectionKey, sectionName, platform }: PlatformSectionContentProps) {
+  // Handle different section types with proper data table components
   switch (sectionKey) {
     case 'addressingModes':
+      return (
+        <AddressingModesDataTable
+          platformId={platform.id}
+          columns={[
+            { key: 'name', label: 'Name', sortable: true },
+            { key: 'code', label: 'Code', sortable: true },
+            { key: 'size', label: 'Size', sortable: true, render: (value) => `${value} bytes` },
+            { key: 'format', label: 'Format', sortable: true },
+            { key: 'pattern', label: 'Pattern', sortable: true },
+          ]}
+          searchPlaceholder="Search addressing modes..."
+          addButtonText="Add Addressing Mode"
+          emptyMessage="No addressing modes found. Click 'Add Addressing Mode' to create your first entry."
+        />
+      )
+
     case 'instructionSet':
+      return (
+        <InstructionSetsDataTable
+          platformId={platform.id}
+          columns={[
+            {
+              key: 'expand',
+              label: '',
+              width: '40',
+              render: () => null // Handled by the component
+            },
+            { key: 'name', label: 'Group Name', sortable: true },
+            {
+              key: 'meta',
+              label: 'Description',
+              render: (value) => value?.description || '-'
+            },
+          ]}
+          searchPlaceholder="Search instruction groups..."
+          addButtonText="Add Instruction Group"
+          emptyMessage="No instruction groups found. Click 'Add Instruction Group' to create your first entry."
+        />
+      )
+
     case 'vectors':
       return (
-        <div>
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">
-              {sectionName} ({Array.isArray(data) ? data.length : 0} items)
-            </h3>
-          </div>
-
-          {Array.isArray(data) && data.length > 0 ? (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-auto max-h-96">
-                {JSON.stringify(data, null, 2)}
-              </pre>
-            </div>
-          ) : (
-            <p className="text-gray-500">No {sectionName.toLowerCase()} configured.</p>
-          )}
-        </div>
+        <VectorsDataTable
+          platformId={platform.id}
+          columns={[
+            { key: 'name', label: 'Name', sortable: true },
+            {
+              key: 'address',
+              label: 'Address',
+              sortable: true,
+              render: (value) => `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
+            },
+            {
+              key: 'isEntry',
+              label: 'Entry Point',
+              render: (value) => value ? 'Yes' : 'No'
+            },
+          ]}
+          searchPlaceholder="Search vectors..."
+          addButtonText="Add Vector"
+          emptyMessage="No vectors found. Click 'Add Vector' to create your first entry."
+        />
       )
 
     case 'projects':
@@ -53,10 +89,14 @@ function PlatformSectionContent({ sectionKey, sectionName, data, platform }: Pla
 
     default:
       return (
-        <div className="bg-gray-50 rounded-lg p-4">
-          <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-auto max-h-96">
-            {JSON.stringify(data, null, 2)}
-          </pre>
+        <div className="text-center py-8">
+          <div className="text-gray-400 mb-4">
+            <Cpu className="h-12 w-12 mx-auto" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Section Not Implemented</h3>
+          <p className="text-gray-500">
+            The {sectionName} section is not yet implemented.
+          </p>
         </div>
       )
   }
@@ -72,7 +112,7 @@ function PlatformProjectsList({ platformId }: { platformId: string }) {
     const loadProjects = async () => {
       try {
         const { data } = await db.projects.getAll()
-        const platformProjects = data?.filter(p => p.meta?.platformId === platformId) || []
+        const platformProjects = data?.filter(p => p.platformId === platformId) || []
         setProjects(platformProjects)
       } catch (error) {
         console.error('Error loading platform projects:', error)
@@ -287,29 +327,11 @@ export default function PlatformSectionPage() {
 
           {/* Section Content */}
           <div className="p-6">
-            {platform.meta && typeof platform.meta === 'object' && platform.meta !== null && sectionConfig.key in platform.meta ? (
-              <PlatformSectionContent
-                sectionKey={sectionConfig.key}
-                sectionName={sectionConfig.name}
-                data={(platform.meta as any)[sectionConfig.key]}
-                platform={platform}
-              />
-            ) : (
-              <div className="text-center py-12">
-                <div className="text-gray-400 mb-4">
-                  {sectionConfig.icon}
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No {sectionConfig.name} Data</h3>
-                <p className="text-gray-500 max-w-md mx-auto">
-                  This platform doesn't have any {sectionConfig.name.toLowerCase()} configured yet.
-                </p>
-                {sectionConfig.key === 'projects' && (
-                  <p className="mt-2 text-sm text-gray-400">
-                    Projects using this platform will appear here.
-                  </p>
-                )}
-              </div>
-            )}
+            <PlatformSectionContent
+              sectionKey={sectionConfig.key}
+              sectionName={sectionConfig.name}
+              platform={platform}
+            />
           </div>
         </div>
       </div>

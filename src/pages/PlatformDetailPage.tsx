@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db, supabase } from '../lib/supabase'
 import { logger } from '../lib/logger'
-import { Calendar, Edit, Trash2, ArrowLeft, Globe, Lock, Cpu } from 'lucide-react'
+import { Calendar, Edit, Trash2, ArrowLeft, Globe, Lock, Cpu, Database } from 'lucide-react'
 import type { Platform } from '@prisma/client'
 import EditPlatformModal from '../components/EditPlatformModal'
 import DeletePlatformModal from '../components/DeletePlatformModal'
@@ -10,16 +10,21 @@ import SectionCard from '../components/SectionCard'
 import { usePlatformSectionCounts } from '../hooks/usePlatformSectionCounts'
 import { usePlatformPermissions } from '../hooks/usePlatformPermissions'
 import { PLATFORM_SECTIONS } from '../lib/platform-sections'
+import { scaffoldPlatformData, type ScaffoldingResult } from '../lib/platform-scaffolding'
+import { useAuthStore } from '../stores/auth-store'
 
 export default function PlatformDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
 
   const [platform, setPlatform] = useState<Platform | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [scaffolding, setScaffolding] = useState(false)
+  const [scaffoldingResult, setScaffoldingResult] = useState<ScaffoldingResult | null>(null)
 
   // Fetch section counts
   const { counts, loading: countsLoading } = usePlatformSectionCounts(id)
@@ -114,6 +119,35 @@ export default function PlatformDetailPage() {
     navigate('/platforms')
   }
 
+  const handleScaffold = async (force: boolean = false) => {
+    if (!platform || !user?.id) return
+
+    try {
+      setScaffolding(true)
+      setScaffoldingResult(null)
+
+      const result = await scaffoldPlatformData(platform.id, platform.name, user.id, force)
+      setScaffoldingResult(result)
+
+      // Refresh counts if successful
+      if (result.success) {
+        // The real-time subscriptions should handle the updates automatically
+        // but we can trigger a manual refresh if needed
+        window.location.reload()
+      }
+    } catch (err) {
+      console.error('Scaffolding error:', err)
+      setScaffoldingResult({
+        success: false,
+        message: 'Failed to scaffold platform data',
+        counts: { addressingModes: 0, instructionGroups: 0, vectors: 0 },
+        errors: [err instanceof Error ? err.message : String(err)]
+      })
+    } finally {
+      setScaffolding(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -181,6 +215,14 @@ export default function PlatformDetailPage() {
             {showManagementActions && (
               <div className="flex items-center space-x-3">
                 <button
+                  onClick={() => handleScaffold(false)}
+                  disabled={scaffolding}
+                  className="inline-flex items-center px-3 py-2 border border-blue-300 shadow-sm text-sm leading-4 font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Database className="h-4 w-4 mr-2" />
+                  {scaffolding ? 'Scaffolding...' : 'Scaffold Data'}
+                </button>
+                <button
                   onClick={handleEdit}
                   className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
@@ -210,21 +252,68 @@ export default function PlatformDetailPage() {
           </p>
         </div>
 
+        {/* Scaffolding Result Notification */}
+        {scaffoldingResult && (
+          <div className={`mb-6 p-4 rounded-lg border ${
+            scaffoldingResult.success
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <div className="flex items-start">
+              <div className="flex-1">
+                <h3 className="text-sm font-medium">
+                  {scaffoldingResult.success ? 'Scaffolding Successful' : 'Scaffolding Failed'}
+                </h3>
+                <p className="mt-1 text-sm">{scaffoldingResult.message}</p>
+                {scaffoldingResult.success && (
+                  <div className="mt-2 text-sm">
+                    <p>Created:</p>
+                    <ul className="list-disc list-inside ml-2">
+                      <li>{scaffoldingResult.counts.addressingModes} addressing modes</li>
+                      <li>{scaffoldingResult.counts.instructionGroups} instruction groups</li>
+                      <li>{scaffoldingResult.counts.vectors} vectors</li>
+                    </ul>
+                  </div>
+                )}
+                {scaffoldingResult.errors && scaffoldingResult.errors.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm font-medium">Errors:</p>
+                    <ul className="list-disc list-inside ml-2 text-sm">
+                      {scaffoldingResult.errors.map((error, index) => (
+                        <li key={index}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setScaffoldingResult(null)}
+                className="ml-4 text-gray-400 hover:text-gray-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Section Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {PLATFORM_SECTIONS.map((section) => (
-            <SectionCard
-              key={section.key}
-              projectId={platform.id}
-              sectionName={section.name}
-              sectionKey={section.route}
-              icon={section.icon}
-              count={counts[section.key as keyof typeof counts] || 0}
-              description={section.description}
-              loading={countsLoading}
-              basePath="/platform"
-            />
-          ))}
+          {PLATFORM_SECTIONS.map((section) => {
+            const count = counts?.[section.key as keyof typeof counts] || 0
+            return (
+              <SectionCard
+                key={section.key}
+                projectId={id || ''}
+                sectionName={section.name}
+                sectionKey={section.route}
+                description={section.description}
+                count={count}
+                icon={section.icon}
+                loading={countsLoading}
+                basePath="/platforms"
+              />
+            )
+          })}
         </div>
 
         {/* Platform Info */}

@@ -16,6 +16,11 @@ export type {
   StringType,
   StringCommand,
   Struct,
+  Platform,
+  AddressingMode,
+  InstructionGroup,
+  InstructionCode,
+  Vector,
   Prisma,
 } from '@prisma/client'
 

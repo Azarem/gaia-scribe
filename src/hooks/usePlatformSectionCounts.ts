@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { db } from '../lib/supabase'
+import { useState, useEffect, useCallback } from 'react'
+import { db, supabase } from '../lib/supabase'
 
 interface PlatformSectionCounts {
   addressingModes: number
@@ -16,68 +16,146 @@ export function usePlatformSectionCounts(platformId: string | undefined) {
     projects: 0
   })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const fetchCounts = useCallback(async () => {
     if (!platformId) {
       setLoading(false)
       return
     }
 
-    const loadCounts = async () => {
-      try {
-        setLoading(true)
+    try {
+      setLoading(true)
+      setError(null)
 
-        // Get platform data to extract counts from meta
-        const { data: platform, error: platformError } = await db.platforms.getById(platformId)
+      // Fetch counts for all sections in parallel
+      const [
+        addressingModesResult,
+        instructionGroupsResult,
+        vectorsResult,
+        projectsResult,
+      ] = await Promise.all([
+        db.addressingModes.getByPlatform(platformId),
+        db.instructionGroups.getByPlatform(platformId),
+        db.vectors.getByPlatform(platformId),
+        db.projects.getAll(),
+      ])
 
-        if (platformError || !platform) {
-          console.error('Error loading platform for counts:', platformError)
-          return
-        }
+      // Check for errors
+      const results = [
+        { name: 'addressingModes', result: addressingModesResult },
+        { name: 'instructionGroups', result: instructionGroupsResult },
+        { name: 'vectors', result: vectorsResult },
+        { name: 'projects', result: projectsResult },
+      ]
 
-        // Extract counts from platform meta data
-        let addressingModesCount = 0
-        let instructionSetCount = 0
-        let vectorsCount = 0
-
-        if (platform.meta) {
-          // Count addressing modes
-          if (Array.isArray(platform.meta.addressingModes)) {
-            addressingModesCount = platform.meta.addressingModes.length
-          }
-
-          // Count instruction set items
-          if (Array.isArray(platform.meta.instructionSet)) {
-            instructionSetCount = platform.meta.instructionSet.length
-          }
-
-          // Count vectors
-          if (Array.isArray(platform.meta.vectors)) {
-            vectorsCount = platform.meta.vectors.length
-          }
-        }
-
-        // Count projects that use this platform
-        const { data: projects } = await db.projects.getAll()
-        const projectsCount = projects?.filter(p => p.meta?.platformId === platformId).length || 0
-
-        setCounts({
-          addressingModes: addressingModesCount,
-          instructionSet: instructionSetCount,
-          vectors: vectorsCount,
-          projects: projectsCount
-        })
-
-      } catch (error) {
-        console.error('Error loading platform section counts:', error)
-        // Keep default counts on error
-      } finally {
-        setLoading(false)
+      const errorResult = results.find(r => r.result.error)
+      if (errorResult) {
+        throw new Error(`Failed to fetch ${errorResult.name}: ${errorResult.result.error?.message || 'Unknown error'}`)
       }
-    }
 
-    loadCounts()
+      // Count projects that use this platform
+      const projectsCount = projectsResult.data?.filter(p => p.platformId === platformId).length || 0
+
+      // Update counts
+      setCounts({
+        addressingModes: addressingModesResult.data?.length || 0,
+        instructionSet: instructionGroupsResult.data?.length || 0,
+        vectors: vectorsResult.data?.length || 0,
+        projects: projectsCount,
+      })
+    } catch (err) {
+      console.error('Error fetching platform section counts:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch platform section counts')
+    } finally {
+      setLoading(false)
+    }
   }, [platformId])
 
-  return { counts, loading }
+  // Initial fetch
+  useEffect(() => {
+    fetchCounts()
+  }, [fetchCounts])
+
+  // Real-time subscriptions for platform-related tables
+  useEffect(() => {
+    if (!platformId) return
+
+    const addressingModesChannel = supabase
+      .channel(`addressing-modes-counts-${platformId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'AddressingMode',
+          filter: `platformId=eq.${platformId}`
+        },
+        () => {
+          // Refetch counts when addressing modes change
+          fetchCounts()
+        }
+      )
+      .subscribe()
+
+    const instructionGroupsChannel = supabase
+      .channel(`instruction-groups-counts-${platformId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'InstructionGroup',
+          filter: `platformId=eq.${platformId}`
+        },
+        () => {
+          // Refetch counts when instruction groups change
+          fetchCounts()
+        }
+      )
+      .subscribe()
+
+    const vectorsChannel = supabase
+      .channel(`vectors-counts-${platformId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'Vector',
+          filter: `platformId=eq.${platformId}`
+        },
+        () => {
+          // Refetch counts when vectors change
+          fetchCounts()
+        }
+      )
+      .subscribe()
+
+    const projectsChannel = supabase
+      .channel(`projects-counts-${platformId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ScribeProject',
+          filter: `platformId=eq.${platformId}`
+        },
+        () => {
+          // Refetch counts when projects change
+          fetchCounts()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(addressingModesChannel)
+      supabase.removeChannel(instructionGroupsChannel)
+      supabase.removeChannel(vectorsChannel)
+      supabase.removeChannel(projectsChannel)
+    }
+  }, [platformId, fetchCounts])
+
+  return { counts, loading, error }
 }
