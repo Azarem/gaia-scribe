@@ -306,7 +306,7 @@ export class PlatformImportOrchestrator {
       onProgress?.('Importing addressing modes...', 5, 8)
 
       // Step 5: Import Addressing Modes
-      let addressingModeMap: { [key: string]: string } = {}
+      const addressingModeMap: { [key: string]: string } = {}
       if (internalData.addressingModes && internalData.addressingModes.length > 0) {
         logger.platform.import(`Importing ${internalData.addressingModes.length} addressing modes`)
 
@@ -336,7 +336,7 @@ export class PlatformImportOrchestrator {
       onProgress?.('Importing instruction groups...', 6, 8)
 
       // Step 6: Import Instruction Groups
-      let instructionGroupMap: { [key: string]: string } = {}
+      const instructionGroupMap: { [key: string]: string } = {}
       if (internalData.instructionGroups && internalData.instructionGroups.length > 0) {
         logger.platform.import(`Importing ${internalData.instructionGroups.length} instruction groups`)
 
