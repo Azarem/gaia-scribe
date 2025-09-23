@@ -4,6 +4,8 @@ import Modal from './Modal'
 import { Search, Download, Calendar, Eye, Tag } from 'lucide-react'
 import { db } from '../lib/supabase'
 import { createImportOrchestrator, type ImportProgressCallback } from '../lib/import-orchestrator'
+
+import PlatformSelector from './PlatformSelector'
 import type { ScribeProject } from '@prisma/client'
 import type { GameRomBranchData } from '@gaialabs/shared'
 import clsx from 'clsx'
@@ -32,6 +34,7 @@ export default function ImportProjectModal({
   } | null>(null)
   const [selectedGameRomBranch, setSelectedGameRomBranch] = useState<GameRomBranchData | null>(null)
   const [customProjectName, setCustomProjectName] = useState('')
+  const [selectedPlatformId, setSelectedPlatformId] = useState<string>('')
 
   // Search for external GameRomBranches
   useEffect(() => {
@@ -72,7 +75,7 @@ export default function ImportProjectModal({
 
   // Handle GameRomBranch import with comprehensive data transformation
   const handleImport = async () => {
-    if (!user?.id || !selectedGameRomBranch || !customProjectName.trim()) return
+    if (!user?.id || !selectedGameRomBranch || !customProjectName.trim() || !selectedPlatformId) return
 
     setImporting(selectedGameRomBranch.id)
     setError(null)
@@ -94,6 +97,7 @@ export default function ImportProjectModal({
         selectedGameRomBranch.id,
         user.id,
         projectName,
+        selectedPlatformId,
         onProgress
       )
 
@@ -112,31 +116,14 @@ export default function ImportProjectModal({
       if (result.projectId) {
         const { data: newProject, error: fetchError } = await db.projects.getById(result.projectId)
 
-        if (fetchError || !newProject) {
-          console.warn('Could not fetch created project, but import succeeded')
-          // Create a minimal project object for the callback
-          const minimalProject: ScribeProject = {
-            id: result.projectId,
-            name: result.projectName || 'Imported Project',
-            isPublic: false,
-            meta: null,
-            gameRomId: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            deletedAt: null,
-            createdBy: user.id,
-            updatedBy: user.id,
-            deletedBy: null
-          }
-          onImportComplete?.(minimalProject)
-        } else {
-          onImportComplete?.(newProject)
-        }
+        if (fetchError) throw fetchError;
+        onImportComplete?.(newProject)
       }
 
       // Reset form and close modal on success
       setSelectedGameRomBranch(null)
       setCustomProjectName('')
+      setSelectedPlatformId('')
       onClose()
     } catch (err) {
       console.error('Error importing project:', err)
@@ -153,11 +140,13 @@ export default function ImportProjectModal({
     setError(null)
     setSelectedGameRomBranch(null)
     setCustomProjectName('')
+    setSelectedPlatformId('')
   }
 
   const handleBackToList = () => {
     setSelectedGameRomBranch(null)
     setCustomProjectName('')
+    setSelectedPlatformId('')
     setError(null)
   }
 
@@ -211,6 +200,15 @@ export default function ImportProjectModal({
               </p>
             </div>
 
+            {/* Platform Selection */}
+            <PlatformSelector
+              selectedPlatformId={selectedPlatformId}
+              onPlatformSelect={setSelectedPlatformId}
+              requiredPlatformBranchId={selectedGameRomBranch.platformBranch.id}
+              disabled={!!importing}
+              className="mb-6"
+            />
+
             {/* Error Message */}
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
@@ -247,10 +245,10 @@ export default function ImportProjectModal({
               </button>
               <button
                 onClick={handleImport}
-                disabled={!!importing || !customProjectName.trim()}
+                disabled={!!importing || !customProjectName.trim() || !selectedPlatformId}
                 className={clsx(
                   'px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',
-                  importing || !customProjectName.trim()
+                  importing || !customProjectName.trim() || !selectedPlatformId
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 )}

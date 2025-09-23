@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 
 interface SectionCardProps {
-  projectId: string
+  projectId: string // Keep as projectId for backward compatibility, but represents entity ID
   sectionName: string
   sectionKey: string
   icon: ReactNode
@@ -12,6 +12,7 @@ interface SectionCardProps {
   description: string
   loading?: boolean
   className?: string
+  basePath?: string // Optional base path, defaults to '/project'
 }
 
 export default function SectionCard({
@@ -22,12 +23,13 @@ export default function SectionCard({
   count,
   description,
   loading = false,
-  className
+  className,
+  basePath = '/project'
 }: SectionCardProps) {
   const navigate = useNavigate()
 
   const handleClick = () => {
-    navigate(`/project/${projectId}/${sectionKey}`)
+    navigate(`${basePath}/${projectId}/${sectionKey}`)
   }
 
   return (

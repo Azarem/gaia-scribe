@@ -47,7 +47,8 @@ export interface ImportResult {
  */
 export async function importProject(
   prisma: PrismaClient,
-  projectData: InternalProjectData
+  projectData: InternalProjectData,
+  userId: string
 ): Promise<ImportResult> {
   try {
     console.log('Starting project import transaction...')
@@ -58,7 +59,9 @@ export async function importProject(
       const project = await tx.scribeProject.create({
         data: {
           ...projectData.project,
-          meta: projectData.project.meta as any
+          meta: projectData.project.meta as any,
+          createdBy: userId,
+          updatedBy: userId
         }
       })
       
@@ -308,9 +311,7 @@ export function validateProjectData(projectData: InternalProjectData): string[] 
     errors.push('Project name is required')
   }
   
-  if (!projectData.project.createdBy) {
-    errors.push('Project createdBy is required')
-  }
+  // createdBy will be set during import process
   
   // Validate unique constraints that might cause database errors
   const copCodes = new Set<number>()

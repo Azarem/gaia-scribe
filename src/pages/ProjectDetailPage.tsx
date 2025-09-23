@@ -233,10 +233,10 @@ export default function ProjectDetailPage() {
                 </dd>
               </div>
 
-              {project.gameRomId && (
+              {project.gameRomBranchId && (
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Game ROM ID</dt>
-                  <dd className="mt-1 text-sm text-gray-900 font-mono">{project.gameRomId}</dd>
+                  <dt className="text-sm font-medium text-gray-500">Game ROM BRANCH ID</dt>
+                  <dd className="mt-1 text-sm text-gray-900 font-mono">{project.gameRomBranchId}</dd>
                 </div>
               )}
 

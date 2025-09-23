@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useAuthStore } from '../stores/auth-store'
 import Modal from './Modal'
 import FileUpload from './FileUpload'
+import PlatformSelector from './PlatformSelector'
 import { db } from '../lib/supabase'
 import { parseRomHeader, generateProjectName, validateRomFile, type RomHeaderInfo } from '../lib/rom-parser'
 import { Plus, CheckCircle, AlertCircle, Gamepad2 } from 'lucide-react'
@@ -23,6 +24,7 @@ export default function CreateProjectModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [romHeader, setRomHeader] = useState<RomHeaderInfo | null>(null)
   const [projectName, setProjectName] = useState('')
+  const [selectedPlatformId, setSelectedPlatformId] = useState<string>('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,12 +66,13 @@ export default function CreateProjectModal({
     setSelectedFile(null)
     setRomHeader(null)
     setProjectName('')
+    setSelectedPlatformId('')
     setFileError(null)
     setError(null)
   }, [])
 
   const handleCreateProject = useCallback(async () => {
-    if (!user?.id || !projectName.trim()) return
+    if (!user?.id || !projectName.trim() || !selectedPlatformId) return
 
     setIsCreating(true)
     setError(null)
@@ -99,6 +102,7 @@ export default function CreateProjectModal({
         {
           name: projectName.trim(),
           isPublic: false, // Always private by default
+          platformId: selectedPlatformId,
           meta: projectMeta
         },
         user.id
@@ -121,7 +125,7 @@ export default function CreateProjectModal({
     } finally {
       setIsCreating(false)
     }
-  }, [user?.id, projectName, romHeader, selectedFile, onProjectCreated, onClose, handleFileRemove])
+  }, [user?.id, projectName, selectedPlatformId, romHeader, selectedFile, onProjectCreated, onClose, handleFileRemove])
 
   const handleClose = useCallback(() => {
     if (!isCreating && !isAnalyzing) {
@@ -269,6 +273,16 @@ export default function CreateProjectModal({
           </div>
         )}
 
+        {/* Platform Selection */}
+        {(romHeader || selectedFile) && (
+          <PlatformSelector
+            selectedPlatformId={selectedPlatformId}
+            onPlatformSelect={setSelectedPlatformId}
+            disabled={isCreating || isAnalyzing}
+            className="mb-6"
+          />
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -291,13 +305,13 @@ export default function CreateProjectModal({
           
           <button
             onClick={handleCreateProject}
-            disabled={!projectName.trim() || isCreating || isAnalyzing}
+            disabled={!projectName.trim() || !selectedPlatformId || isCreating || isAnalyzing}
             className={clsx(
               'px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',
               'flex items-center',
               {
-                'bg-blue-600 text-white hover:bg-blue-700': projectName.trim() && !isCreating && !isAnalyzing,
-                'bg-gray-300 text-gray-500 cursor-not-allowed': !projectName.trim() || isCreating || isAnalyzing,
+                'bg-blue-600 text-white hover:bg-blue-700': projectName.trim() && selectedPlatformId && !isCreating && !isAnalyzing,
+                'bg-gray-300 text-gray-500 cursor-not-allowed': !projectName.trim() || !selectedPlatformId || isCreating || isAnalyzing,
               }
             )}
           >

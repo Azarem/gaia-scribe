@@ -55,7 +55,7 @@ export interface CompleteGameRomData {
  * Note: projectId will be set after the project is created
  */
 export interface InternalProjectData {
-  project: Omit<ScribeProject, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'>
+  project: Omit<ScribeProject, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>
   cops: Omit<Cop, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   files: Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   blocks: Omit<Block, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
@@ -80,16 +80,19 @@ export interface InternalProjectData {
  */
 export function convertExternalToInternal(
   externalData: CompleteGameRomData,
-  userId: string,
-  projectName: string
+  _userId: string,
+  projectName: string,
+  platformId: string,
+  gameRomBranchId: string
 ): InternalProjectData {
   const { gameRomBranch, platformBranch, platform, gameRom, game, region } = externalData
   
   // Create the main ScribeProject record
-  const project: Omit<ScribeProject, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'> = {
+  const project = {
     name: projectName,
     isPublic: false, // Default to private for imported projects
-    gameRomId: gameRom.id,
+    gameRomBranchId: gameRomBranchId,
+    platformId: platformId,
 
     // Store all external metadata in the meta JSON field
     meta: {
@@ -130,10 +133,7 @@ export function convertExternalToInternal(
       importSource: 'external-gamerom-branch'
     },
 
-    // Audit fields
-    createdBy: userId,
-    updatedBy: null,
-    deletedBy: null
+    // Audit fields will be set by the database/import process
   }
 
   // Extract and convert nested data structures from GameRomBranch

@@ -390,7 +390,7 @@ export const db = {
         .single()
     },
     
-    async create(project: { name: string; isPublic?: boolean; gameRomId?: string; meta?: any }, userId: string) {
+    async create(project: { name: string; isPublic?: boolean; gameRomId?: string; platformId?: string; meta?: any }, userId: string) {
       const projectId = createId()
       return (supabase as any)
         .from('ScribeProject')
@@ -399,6 +399,7 @@ export const db = {
           name: project.name,
           isPublic: project.isPublic || false,
           gameRomId: project.gameRomId,
+          platformId: project.platformId || '', // TODO: Should be a valid platform ID
           meta: project.meta,
           createdBy: userId,
         })
@@ -1483,6 +1484,159 @@ export const db = {
     },
   },
 
+  // Platforms
+  platforms: {
+    async getAll() {
+      return supabase
+        .from('Platform')
+        .select('*')
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+    },
+
+    async getByUser(userId: string) {
+      console.log('Getting platforms for user with working client:', userId)
+      const workingClient = createWorkingClient()
+      return workingClient
+        .from('Platform')
+        .select('*')
+        .eq('createdBy', userId)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false, nullsFirst: false })
+        .order('createdAt', { ascending: false })
+    },
+
+    async getPublic(searchQuery?: string) {
+      let query = supabase
+        .from('Platform')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+
+      if (searchQuery?.trim()) {
+        query = query.ilike('name', `%${searchQuery.trim()}%`)
+      }
+
+      return query.limit(20)
+    },
+
+    // Public platform discovery methods
+    async getPublicRecent(limit: number = 12) {
+      return supabase
+        .from('Platform')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .order('createdAt', { ascending: false })
+        .limit(limit)
+    },
+
+    async getPublicRecentlyUpdated(limit: number = 12) {
+      return supabase
+        .from('Platform')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+        .limit(limit)
+    },
+
+    async getPublicMostActive(limit: number = 12) {
+      // Platforms with recent updates, ordered by most recent activity
+      return supabase
+        .from('Platform')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+        .limit(limit)
+    },
+
+    async getPublicPopular(limit: number = 12) {
+      // For now, use a combination of recent creation and updates as a proxy for popularity
+      // This could be enhanced later with engagement metrics
+      return supabase
+        .from('Platform')
+        .select('*')
+        .eq('isPublic', true)
+        .is('deletedAt', null)
+        .order('createdAt', { ascending: false })
+        .limit(limit)
+    },
+
+    async getByName(name: string) {
+      return supabase
+        .from('Platform')
+        .select('*')
+        .ilike('name', `%${name.trim()}%`)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+    },
+
+    async getByUserWithNameFilter(userId: string, nameFilter?: string) {
+      let query = supabase
+        .from('Platform')
+        .select('*')
+        .eq('createdBy', userId)
+        .is('deletedAt', null)
+        .order('updatedAt', { ascending: false })
+
+      if (nameFilter?.trim()) {
+        query = query.ilike('name', `%${nameFilter.trim()}%`)
+      }
+
+      return query
+    },
+
+    async getById(id: string) {
+      return supabase
+        .from('Platform')
+        .select('*')
+        .eq('id', id)
+        .is('deletedAt', null)
+        .single()
+    },
+
+    async create(platform: { name: string; isPublic?: boolean; meta?: any }, userId: string) {
+      const platformId = createId()
+      return (supabase as any)
+        .from('Platform')
+        .insert({
+          id: platformId,
+          name: platform.name,
+          isPublic: platform.isPublic || false,
+          meta: platform.meta,
+          createdBy: userId,
+        })
+        .select()
+        .single()
+    },
+
+    async update(id: string, updates: { name?: string; isPublic?: boolean; meta?: any }, userId: string) {
+      return (supabase as any)
+        .from('Platform')
+        .update({
+          ...updates,
+          updatedBy: userId,
+        })
+        .eq('id', id)
+        .select()
+        .single()
+    },
+
+    async delete(id: string, userId: string) {
+      return (supabase as any)
+        .from('Platform')
+        .update({
+          deletedAt: new Date().toISOString(),
+          deletedBy: userId,
+        })
+        .eq('id', id)
+        .eq('createdBy', userId) // Only allow deletion by owner
+    },
+  },
+
   // External project search (for importing from public API via HTTP)
   // Uses @gaialabs/shared functions for standardized data access
   external: {
@@ -1670,6 +1824,70 @@ export const db = {
         }
       } catch (error) {
         console.error('Error fetching complete project data:', error)
+        return { data: null, error }
+      }
+    },
+
+    // Platform Branch search and import methods
+    async searchPlatformBranches(searchQuery?: string) {
+      try {
+        // Search PlatformBranches with platform name filtering
+        let url = `${EXTERNAL_SUPABASE_URL}/rest/v1/PlatformBranch?select=*,platform:Platform!inner(id,name,meta)&order=updatedAt.desc&limit=20`
+
+        if (searchQuery?.trim()) {
+          // Filter by platform name using the joined platform table
+          url += `&platform.name=ilike.%25${encodeURIComponent(searchQuery.trim())}%25`
+        }
+
+        const response = await fetch(url, {
+          headers: {
+            'apikey': EXTERNAL_SUPABASE_KEY,
+            'Authorization': `Bearer ${EXTERNAL_SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        return { data, error: null }
+      } catch (error) {
+        console.error('Error searching PlatformBranches:', error)
+        return { data: null, error }
+      }
+    },
+
+    async getPlatformBranchById(id: string) {
+      try {
+        // Include platform data with name field using proper JOIN
+        const url = `${EXTERNAL_SUPABASE_URL}/rest/v1/PlatformBranch?select=*,platform:Platform!inner(id,name,meta)&id=eq.${encodeURIComponent(id)}&limit=1`
+
+        const response = await fetch(url, {
+          headers: {
+            'apikey': EXTERNAL_SUPABASE_KEY,
+            'Authorization': `Bearer ${EXTERNAL_SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        const platformBranch = data?.[0]
+
+        if (!platformBranch) {
+          throw new Error('PlatformBranch not found')
+        }
+
+        return { data: platformBranch, error: null }
+      } catch (error) {
+        console.error('Error fetching PlatformBranch:', error)
         return { data: null, error }
       }
     }

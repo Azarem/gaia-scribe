@@ -24,7 +24,7 @@ CREATE TABLE "ScribeProject" (
     "name" TEXT NOT NULL,
     "isPublic" BOOLEAN NOT NULL DEFAULT false,
     "meta" JSONB,
-    "gameRomId" TEXT,
+    "gameRomBranchId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdBy" UUID NOT NULL,
     "deletedAt" TIMESTAMP(3),
@@ -278,7 +278,6 @@ CREATE TABLE "ProjectUser" (
 
 -- CreateTable
 CREATE TABLE "public"."BlockArtifact" (
-    "id" TEXT NOT NULL,
     "blockId" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "meta" JSONB,
@@ -289,7 +288,7 @@ CREATE TABLE "public"."BlockArtifact" (
     "updatedAt" TIMESTAMP(3),
     "updatedBy" UUID,
 
-    CONSTRAINT "BlockArtifact_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "BlockArtifact_pkey" PRIMARY KEY ("blockId")
 );
 
 -- CreateIndex
@@ -538,12 +537,6 @@ CREATE INDEX "Struct_updatedBy_idx" ON "public"."Struct"("updatedBy");
 -- CreateIndex
 CREATE INDEX "Struct_deletedBy_idx" ON "public"."Struct"("deletedBy");
 
-
--- CreateIndex
-CREATE UNIQUE INDEX "BlockArtifact_blockId_key" ON "public"."BlockArtifact"("blockId");
-
--- CreateIndex
-CREATE INDEX "BlockArtifact_blockId_idx" ON "public"."BlockArtifact"("blockId");
 
 -- CreateIndex
 CREATE INDEX "BlockArtifact_createdBy_idx" ON "public"."BlockArtifact"("createdBy");

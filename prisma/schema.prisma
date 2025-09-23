@@ -72,6 +72,21 @@ model User {
   createdBlockArtfiacts BlockArtifact[] @relation("blockArtifactCreatedBy")
   updatedBlockArtfiacts BlockArtifact[] @relation("blockArtifactUpdatedBy")
   deletedBlockArtfiacts BlockArtifact[] @relation("blockArtifactDeletedBy")
+  createdPlatforms    Platform[]    @relation("platformCreatedBy")
+  updatedPlatforms    Platform[]    @relation("platformUpdatedBy")
+  deletedPlatforms    Platform[]    @relation("platformDeletedBy")
+  createdAddressingModes AddressingMode[] @relation("addressingModeCreatedBy")
+  updatedAddressingModes AddressingMode[] @relation("addressingModeUpdatedBy")
+  deletedAddressingModes AddressingMode[] @relation("addressingModeDeletedBy")
+  createdInstructionGroups InstructionGroup[] @relation("instructionGroupCreatedBy")
+  updatedInstructionGroups InstructionGroup[] @relation("instructionGroupUpdatedBy")
+  deletedInstructionGroups InstructionGroup[] @relation("instructionGroupDeletedBy")
+  createdInstructionCodes InstructionCode[] @relation("instructionCodeCreatedBy")
+  updatedInstructionCodes InstructionCode[] @relation("instructionCodeUpdatedBy")
+  deletedInstructionCodes InstructionCode[] @relation("instructionCodeDeletedBy")
+  createdVectors Vector[] @relation("vectorCreatedBy")
+  updatedVectors Vector[] @relation("vectorUpdatedBy")
+  deletedVectors Vector[] @relation("vectorDeletedBy")
 
   createdAt DateTime @default(now())
   createdBy String @db.Uuid
@@ -97,7 +112,10 @@ model ScribeProject {
   isPublic Boolean  @default(false)
   meta     Json?
 
-  gameRomId String?
+  gameRomBranchId String?
+
+  platform   Platform @relation(fields: [platformId], references: [id])
+  platformId String
   
   // Related data
   cops      Cop[]
@@ -124,6 +142,7 @@ model ScribeProject {
   updatedByUser User? @relation(name: "projectUpdatedBy", fields: [updatedBy], references: [id])
 
   @@index([name])
+  @@index([gameRomBranchId])
   @@index([createdBy])
   @@index([updatedBy])
   @@index([deletedBy])
@@ -370,11 +389,9 @@ model Block {
 }
 
 model BlockArtifact {
-  id          String  @id @default(cuid())
-
   // Owner
   block   Block @relation(fields: [blockId], references: [id])
-  blockId String @unique
+  blockId String @id
 
   content String
   meta    Json?
@@ -390,7 +407,6 @@ model BlockArtifact {
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "blockArtifactUpdatedBy", fields: [updatedBy], references: [id])
 
-  @@index([blockId])
   @@index([createdBy])
   @@index([updatedBy])
   @@index([deletedBy])
@@ -551,6 +567,152 @@ model Struct {
   
   @@unique([projectId, name])
   @@index([projectId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
+}
+
+model Platform {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "NES", "SNES", "Genesis"
+  isPublic    Boolean  @default(false)
+  meta        Json?
+  
+  platformBranchId String?
+
+  addressingModes AddressingMode[]
+  instructionSet  InstructionGroup[]
+  vectors         Vector[]
+  projects        ScribeProject[]
+
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "platformCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "platformDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "platformUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@index([platformBranchId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
+}
+
+model AddressingMode {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "AbsoluteLong", "DirectPageIndirectIndexedY"
+  code        String   // e.g., "long", "dp_ind_y"
+  size        Int
+  format      String?
+  pattern     String?
+  meta        Json?
+
+  platform    Platform @relation(fields: [platformId], references: [id])
+  platformId  String
+
+  instructionCodes InstructionCode[]
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "addressingModeCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "addressingModeDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "addressingModeUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@index([platformId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
+}
+
+model InstructionGroup {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "ADC", "AND", "ASL"
+  meta        Json?
+  
+  platform    Platform @relation(fields: [platformId], references: [id])
+  platformId  String
+
+  instructions InstructionCode[]
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "instructionGroupCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "instructionGroupDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "instructionGroupUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@unique([platformId, name])
+  @@index([platformId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
+}
+
+model InstructionCode {
+  id      String   @id @default(cuid())
+  code    Int      // e.g., 0x69, 0x29, 0x0A
+  cycles  Int?
+  meta    Json?
+
+  group   InstructionGroup @relation(fields: [groupId], references: [id])
+  groupId String
+
+  mode    AddressingMode @relation(fields: [modeId], references: [id])
+  modeId  String
+
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "instructionCodeCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "instructionCodeDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "instructionCodeUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@index([groupId])
+  @@index([modeId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
+}
+
+model Vector {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "NMI", "IRQ", "BRK"
+  address     Int      // e.g., 0xFFFA, 0xFFFE, 0xFFE7
+  isEntry     Boolean  @default(false)
+  meta        Json?
+  
+  platform    Platform @relation(fields: [platformId], references: [id])
+  platformId  String
+  
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "vectorCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "vectorDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "vectorUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@index([platformId])
   @@index([createdBy])
   @@index([updatedBy])
   @@index([deletedBy])

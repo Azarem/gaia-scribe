@@ -192,12 +192,12 @@ export default function PublicProjectsSection({ className }: PublicProjectsSecti
                   </span>
                 </div>
                 
-                {project.gameRomId && (
+                {project.gameRomBranchId && (
                   <div className="flex items-center text-blue-600">
                     <span className="w-4 h-4 mr-2 flex items-center justify-center">
                       🎮
                     </span>
-                    <span>ROM ID: {project.gameRomId}</span>
+                    <span>ROM BRANCH ID: {project.gameRomBranchId}</span>
                   </div>
                 )}
 

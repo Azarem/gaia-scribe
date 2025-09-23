@@ -4,6 +4,9 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import ProjectSectionPage from './pages/ProjectSectionPage'
+import PlatformPage from './pages/PlatformPage'
+import PlatformDetailPage from './pages/PlatformDetailPage'
+import PlatformSectionPage from './pages/PlatformSectionPage'
 import AuthCallback from './pages/AuthCallback'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -66,6 +69,26 @@ function App() {
           element={
             <ProtectedRoute>
               <ProjectSectionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/platforms"
+          element={
+            <ProtectedRoute>
+              <PlatformPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/platforms/:id"
+          element={<PlatformDetailPage />}
+        />
+        <Route
+          path="/platform/:id/:section"
+          element={
+            <ProtectedRoute>
+              <PlatformSectionPage />
             </ProtectedRoute>
           }
         />

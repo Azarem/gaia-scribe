@@ -47,7 +47,7 @@ export async function testBlockConversion(gameRomBranchId: string): Promise<{
     }
 
     // Step 2: Convert data
-    const internalData = convertExternalToInternal(externalData, 'test-user-id', 'Test Project')
+    const internalData = convertExternalToInternal(externalData, 'test-user-id', 'Test Project', 'test-platform-id', 'test-gamerom-branch-id')
 
     // Step 3: Return results
     return {
@@ -116,6 +116,7 @@ export class ImportOrchestrator {
     gameRomBranchId: string,
     userId: string,
     projectName: string,
+    platformId: string,
     onProgress?: ImportProgressCallback
   ): Promise<ImportServiceResult> {
     try {
@@ -146,7 +147,7 @@ export class ImportOrchestrator {
 
       // Step 2: Transform external data to internal format
       console.log('Converting external data to internal format...')
-      const internalData = convertExternalToInternal(externalData, userId, projectName)
+      const internalData = convertExternalToInternal(externalData, userId, projectName, platformId, gameRomBranchId)
       
       onProgress?.('Validating transformed data...', 3, 6)
       
@@ -230,6 +231,7 @@ export class ImportOrchestrator {
           name: internalData.project.name,
           isPublic: internalData.project.isPublic,
           gameRomId: internalData.project.gameRomId,
+          platformId: internalData.project.platformId,
           meta: internalData.project.meta
         },
         userId
@@ -748,8 +750,9 @@ export async function importExternalGameRomBranch(
   gameRomBranchId: string,
   userId: string,
   projectName: string,
+  platformId: string,
   onProgress?: ImportProgressCallback
 ): Promise<ImportServiceResult> {
   const orchestrator = createImportOrchestrator()
-  return orchestrator.importExternalGameRomBranch(gameRomBranchId, userId, projectName, onProgress)
+  return orchestrator.importExternalGameRomBranch(gameRomBranchId, userId, projectName, platformId, onProgress)
 }

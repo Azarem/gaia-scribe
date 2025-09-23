@@ -201,6 +201,12 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center space-x-4">
               <ConnectionStatus />
+              <button
+                onClick={() => navigate('/platforms')}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Platforms
+              </button>
               <div className="flex items-center space-x-2">
                 <User className="h-5 w-5 text-gray-400" />
                 <span className="text-sm text-gray-700">
@@ -312,12 +318,12 @@ export default function DashboardPage() {
                       <span>Updated {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Never'}</span>
                     </div>
                     
-                    {project.gameRomId && (
+                    {project.gameRomBranchId && (
                       <div className="flex items-center text-blue-600">
                         <span className="w-4 h-4 mr-2 flex items-center justify-center">
                           🎮
                         </span>
-                        <span>ROM ID: {project.gameRomId}</span>
+                        <span>ROM BRANCH ID: {project.gameRomBranchId}</span>
                       </div>
                     )}
 
