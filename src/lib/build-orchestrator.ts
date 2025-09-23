@@ -71,10 +71,11 @@ export class BuildOrchestrator {
 
       // Step 2: Construct DbRoot
       this.reportProgress('Constructing database root...', 2, 6)
-      const dbRoot = romData.length < 0x10 
-        ? await this.constructDbRoot() 
-        : await DbRootUtils.fromSupabaseGameRom("Illusion of Gaia");// await this.constructDbRoot()
+      const internalRoot = await this.constructDbRoot()
+      const dbRoot = await DbRootUtils.fromSupabaseGameRom("Illusion of Gaia");// await this.constructDbRoot()
 
+      debugger;
+      
       // Step 3: Create BlockReader and analyze
       this.reportProgress('Analyzing ROM blocks...', 3, 6)
       const blockReader = new BlockReader(romData, dbRoot)
