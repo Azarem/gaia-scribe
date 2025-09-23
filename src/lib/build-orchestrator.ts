@@ -269,7 +269,7 @@ export class BuildOrchestrator {
     if (error) throw new Error(`Failed to load string types: ${error.message}`)
     return data || []
   }
-  
+
   private async loadProjectStringCommands(): Promise<StringCommand[]> {
     const { data, error } = await db.stringCommands.getByProject(this.project.id)
     if (error) throw new Error(`Failed to load string commands: ${error.message}`)
@@ -385,16 +385,23 @@ export class BuildOrchestrator {
       scene: block.scene || '',
       postProcess: block.postProcess || '',
       meta: block.meta || {},
-      parts: block.parts.map(part => ({
-        name: part.name,
-        start: part.location,
-        end: part.location + part.size,
-        size: part.size,
-        struct: part.type,
-        order: part.index || 0,
-        block: block.name
-      }))
-    }))
+      parts: block.parts
+        .map((part: BlockPart) => ({
+          name: part.name,
+          start: part.location,
+          end: part.location + part.size,
+          size: part.size,
+          struct: part.type,
+          order: part.index || 0,
+          block: block.name
+        }))
+        .sort((a, b) => {
+          const orderA = a.order ?? 0;
+          const orderB = b.order ?? 0;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.start - b.start;
+        })
+    })).sort((a, b) => a.parts[0].start - b.parts[0].start)
   }
 
   private convertOverridesToDbFormat(overrides: Override[]): Record<number, DbOverride> {
