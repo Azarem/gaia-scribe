@@ -404,19 +404,21 @@ export class BuildOrchestrator {
 
   private convertInstructionSetToDbFormat(addressingModes: AddressingMode[], instructionGroups: InstructionGroup[], instructionCodes: InstructionCode[]) {
     const addrLookup: Record<string, AddressingMode> = {};
+    const addrMap: Record<string, string> = {};
     addressingModes.forEach(mode => {
       addrLookup[mode.name] = mode;
+      addrMap[mode.id] = mode.name;
     });
-    const groupLookup: Record<string, InstructionGroup> = {};
+    const groupMap: Record<string, string> = {};
     instructionGroups.forEach(group => {
-      groupLookup[group.id] = group;
+      groupMap[group.id] = group.name;
     });
     const codeLookup: Record<number, OpCode> = {};
     instructionCodes.forEach(code => {
       codeLookup[code.code] = new OpCode (
         code.code,
-        groupLookup[code.groupId].name,
-        addrLookup[code.modeId].name,
+        groupMap[code.groupId],
+        addrMap[code.modeId],
       );
     });
     return { addrLookup, codeLookup };
