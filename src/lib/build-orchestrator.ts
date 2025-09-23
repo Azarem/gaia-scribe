@@ -10,11 +10,11 @@
  */
 
 import { BlockReader, BlockWriter } from '@gaialabs/core'
-import { BinType, CompressionRegistry, DbBlock } from '@gaialabs/shared'
+import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbStringType, DbStruct } from '@gaialabs/shared'
 import { type DbRoot, OpCode } from '@gaialabs/shared'
 import { db } from './supabase'
 import { useAuthStore } from '../stores/auth-store'
-import type { ScribeProject, Block, BlockPart, Cop, File as PrismaFile, Label, GameMnemonic, Override, Rewrite, StringType, AddressingMode, InstructionGroup, InstructionCode } from '@prisma/client'
+import type { ScribeProject, Block, BlockPart, Cop, File as PrismaFile, Label, GameMnemonic, Override, Rewrite, StringType, AddressingMode, InstructionGroup, InstructionCode, Struct } from '@prisma/client'
 
 /**
  * Progress callback for build operations
@@ -156,7 +156,7 @@ export class BuildOrchestrator {
    */
   private async constructDbRoot(): Promise<DbRoot> {
     // Load all project data
-    const [blocks, cops, files, labels, mnemonics, overrides, rewrites, stringTypes, adrModes, instrGroups, instrCodes] = await Promise.all([
+    const [blocks, cops, files, labels, mnemonics, overrides, rewrites, stringTypes, structs, adrModes, instrGroups, instrCodes] = await Promise.all([
       this.loadProjectBlocks(),
       this.loadProjectCops(),
       this.loadProjectFiles(),
@@ -165,6 +165,7 @@ export class BuildOrchestrator {
       this.loadProjectOverrides(),
       this.loadProjectRewrites(),
       this.loadProjectStringTypes(),
+      this.loadProjectStructs(),
       this.loadPlatformAddressingModes(),
       this.loadPlatformInstructionGroups(),
       this.loadPlatformInstructionCodes()
@@ -177,7 +178,7 @@ export class BuildOrchestrator {
       copDef: this.convertCopsToDbFormat(cops),
       copLookup: {},
       mnemonics: this.convertMnemonicsToDbFormat(mnemonics),
-      structs: {},
+      structs: this.convertStructsToDbFormat(structs),
       stringTypes: this.convertStringTypesToDbFormat(stringTypes),
       stringDelimiters: [],
       stringCharLookup: {},
@@ -268,6 +269,12 @@ export class BuildOrchestrator {
     return data || []
   }
 
+  private async loadProjectStructs(): Promise<Struct[]> {
+    const { data, error } = await db.structs.getByProject(this.project.id)
+    if (error) throw new Error(`Failed to load structs: ${error.message}`)
+    return data || []
+  }
+
   private async loadPlatformAddressingModes(): Promise<AddressingMode[]> {
     const { data, error } = await db.addressingModes.getByPlatform(this.project.platformId)
     if (error) throw new Error(`Failed to load addressing modes: ${error.message}`)
@@ -290,7 +297,7 @@ export class BuildOrchestrator {
    * Convert project data to DbRoot format methods
    * These will need to be implemented based on the exact DbRoot interface requirements
    */
-  private convertCopsToDbFormat(cops: Cop[]): Record<number, any> {
+  private convertCopsToDbFormat(cops: Cop[]): Record<number, CopDef> {
     // Convert Scribe COPs to CopDef format
     const result: Record<number, any> = {}
     cops.forEach(cop => {
@@ -316,7 +323,7 @@ export class BuildOrchestrator {
     return result
   }
 
-  private convertStringTypesToDbFormat(stringTypes: StringType[]): Record<string, any> {
+  private convertStringTypesToDbFormat(stringTypes: StringType[]): Record<string, DbStringType> {
     // Convert Scribe string types to DbStringType format
     const result: Record<string, any> = {}
     stringTypes.forEach(stringType => {
@@ -332,13 +339,14 @@ export class BuildOrchestrator {
     return result
   }
 
-  private convertFilesToDbFormat(files: PrismaFile[]): any[] {
+  private convertFilesToDbFormat(files: PrismaFile[]): DbFile[] {
     // Convert Scribe files to DbFile format
     return files.map(file => ({
       name: file.name,
-      location: file.location,
+      start: file.location,
+      end: file.location + file.size,
       size: file.size,
-      type: file.type,
+      type: file.type as BinType,
       group: file.group || null,
       scene: file.scene || null,
       compressed: file.compressed || false,
@@ -369,7 +377,7 @@ export class BuildOrchestrator {
     }))
   }
 
-  private convertOverridesToDbFormat(overrides: Override[]): Record<number, any> {
+  private convertOverridesToDbFormat(overrides: Override[]): Record<number, DbOverride> {
     // Convert Scribe overrides to DbOverride format
     const result: Record<number, any> = {}
     overrides.forEach(override => {
@@ -399,6 +407,20 @@ export class BuildOrchestrator {
     rewrites.forEach(rewrite => {
       if (rewrite.location !== null && rewrite.value !== null) {
         result[rewrite.location] = rewrite.value
+      }
+    })
+    return result
+  }
+
+  private convertStructsToDbFormat(structs: Struct[]): Record<string, DbStruct> {
+    const result: Record<string, DbStruct> = {}
+    structs.forEach(struct => {
+      result[struct.name] = {
+        name: struct.name,
+        types: struct.types || [],
+        delimiter: struct.delimiter || 0,
+        discriminator: struct.discriminator || 0,
+        parent: struct.parent || '',
       }
     })
     return result
