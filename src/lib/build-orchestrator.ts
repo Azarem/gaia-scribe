@@ -11,10 +11,10 @@
 
 import { BlockReader, BlockWriter } from '@gaialabs/core'
 import { BinType, CompressionRegistry } from '@gaialabs/shared'
-import type { DbRoot } from '@gaialabs/shared'
+import { type DbRoot, OpCode } from '@gaialabs/shared'
 import { db } from './supabase'
 import { useAuthStore } from '../stores/auth-store'
-import type { ScribeProject, Block, BlockPart, Cop, File as PrismaFile, Label, GameMnemonic, Override, Rewrite, StringType } from '@prisma/client'
+import type { ScribeProject, Block, BlockPart, Cop, File as PrismaFile, Label, GameMnemonic, Override, Rewrite, StringType, AddressingMode, InstructionGroup, InstructionCode } from '@prisma/client'
 
 /**
  * Progress callback for build operations
@@ -156,7 +156,7 @@ export class BuildOrchestrator {
    */
   private async constructDbRoot(): Promise<DbRoot> {
     // Load all project data
-    const [blocks, cops, files, labels, mnemonics, overrides, rewrites, stringTypes] = await Promise.all([
+    const [blocks, cops, files, labels, mnemonics, overrides, rewrites, stringTypes, adrModes, instrGroups, instrCodes] = await Promise.all([
       this.loadProjectBlocks(),
       this.loadProjectCops(),
       this.loadProjectFiles(),
@@ -164,8 +164,13 @@ export class BuildOrchestrator {
       this.loadProjectMnemonics(),
       this.loadProjectOverrides(),
       this.loadProjectRewrites(),
-      this.loadProjectStringTypes()
+      this.loadProjectStringTypes(),
+      this.loadPlatformAddressingModes(),
+      this.loadPlatformInstructionGroups(),
+      this.loadPlatformInstructionCodes()
     ])
+
+    const { addrLookup, codeLookup } = this.convertInstructionSetToDbFormat(adrModes, instrGroups, instrCodes);
 
     // Convert to DbRoot format
     const dbRoot: DbRoot = {
@@ -190,9 +195,9 @@ export class BuildOrchestrator {
       labels: this.convertLabelsToDbFormat(labels),
       rewrites: this.convertRewritesToDbFormat(rewrites),
       entryPoints: [],
-      opCodes: {},
+      opCodes: codeLookup,
       opLookup: {},
-      addrLookup: {},
+      addrLookup,
       compression: CompressionRegistry.get('QuintetLZ')
     }
 
@@ -260,6 +265,24 @@ export class BuildOrchestrator {
   private async loadProjectStringTypes(): Promise<StringType[]> {
     const { data, error } = await db.stringTypes.getByProject(this.project.id)
     if (error) throw new Error(`Failed to load string types: ${error.message}`)
+    return data || []
+  }
+
+  private async loadPlatformAddressingModes(): Promise<AddressingMode[]> {
+    const { data, error } = await db.addressingModes.getByPlatform(this.project.platformId)
+    if (error) throw new Error(`Failed to load addressing modes: ${error.message}`)
+    return data || []
+  }
+
+  private async loadPlatformInstructionGroups(): Promise<InstructionGroup[]> {
+    const { data, error } = await db.instructionGroups.getByPlatform(this.project.platformId)
+    if (error) throw new Error(`Failed to load instruction groups: ${error.message}`)
+    return data || []
+  }
+
+  private async loadPlatformInstructionCodes(): Promise<InstructionCode[]> {
+    const { data, error } = await db.instructionCodes.getByPlatform(this.project.platformId)
+    if (error) throw new Error(`Failed to load instruction codes: ${error.message}`)
     return data || []
   }
 
@@ -377,6 +400,26 @@ export class BuildOrchestrator {
       }
     })
     return result
+  }
+
+  private convertInstructionSetToDbFormat(addressingModes: AddressingMode[], instructionGroups: InstructionGroup[], instructionCodes: InstructionCode[]) {
+    const addrLookup: Record<string, AddressingMode> = {};
+    addressingModes.forEach(mode => {
+      addrLookup[mode.name] = mode;
+    });
+    const groupLookup: Record<string, InstructionGroup> = {};
+    instructionGroups.forEach(group => {
+      groupLookup[group.id] = group;
+    });
+    const codeLookup: Record<number, OpCode> = {};
+    instructionCodes.forEach(code => {
+      codeLookup[code.code] = new OpCode (
+        code.code,
+        groupLookup[code.groupId].name,
+        addrLookup[code.modeId].name,
+      );
+    });
+    return { addrLookup, codeLookup };
   }
 
   /**
