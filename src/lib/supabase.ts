@@ -1016,6 +1016,15 @@ export const db = {
         .order('code', { ascending: true })
     },
 
+    async getByProject(projectId: string) {
+      return supabase
+        .from('StringCommand')
+        .select('*,stringType:StringType!inner(id,projectId,deletedAt)')
+        .eq('stringType.projectId', projectId)
+        .is('deletedAt', null)
+        .is('stringType.deletedAt', null)
+    },
+
     async getById(id: string) {
       return supabase
         .from('StringCommand')

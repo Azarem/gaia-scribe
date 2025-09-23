@@ -10,11 +10,11 @@
  */
 
 import { BlockReader, BlockWriter } from '@gaialabs/core'
-import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbStringType, DbStruct } from '@gaialabs/shared'
+import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbStringType, DbStruct, MemberType } from '@gaialabs/shared'
 import { type DbRoot, OpCode } from '@gaialabs/shared'
 import { db } from './supabase'
 import { useAuthStore } from '../stores/auth-store'
-import type { ScribeProject, Block, BlockPart, Cop, File as PrismaFile, Label, GameMnemonic, Override, Rewrite, StringType, AddressingMode, InstructionGroup, InstructionCode, Struct } from '@prisma/client'
+import type { ScribeProject, Block, BlockPart, Cop, File as PrismaFile, Label, GameMnemonic, Override, Rewrite, StringType, AddressingMode, InstructionGroup, InstructionCode, Struct, StringCommand } from '@prisma/client'
 
 /**
  * Progress callback for build operations
@@ -156,7 +156,7 @@ export class BuildOrchestrator {
    */
   private async constructDbRoot(): Promise<DbRoot> {
     // Load all project data
-    const [blocks, cops, files, labels, mnemonics, overrides, rewrites, stringTypes, structs, adrModes, instrGroups, instrCodes] = await Promise.all([
+    const [blocks, cops, files, labels, mnemonics, overrides, rewrites, stringTypes, stringCommands, structs, adrModes, instrGroups, instrCodes] = await Promise.all([
       this.loadProjectBlocks(),
       this.loadProjectCops(),
       this.loadProjectFiles(),
@@ -165,6 +165,7 @@ export class BuildOrchestrator {
       this.loadProjectOverrides(),
       this.loadProjectRewrites(),
       this.loadProjectStringTypes(),
+      this.loadProjectStringCommands(),
       this.loadProjectStructs(),
       this.loadPlatformAddressingModes(),
       this.loadPlatformInstructionGroups(),
@@ -179,7 +180,7 @@ export class BuildOrchestrator {
       copLookup: {},
       mnemonics: this.convertMnemonicsToDbFormat(mnemonics),
       structs: this.convertStructsToDbFormat(structs),
-      stringTypes: this.convertStringTypesToDbFormat(stringTypes),
+      stringTypes: this.convertStringTypesToDbFormat(stringTypes, stringCommands),
       stringDelimiters: [],
       stringCharLookup: {},
       files: this.convertFilesToDbFormat(files),
@@ -268,6 +269,12 @@ export class BuildOrchestrator {
     if (error) throw new Error(`Failed to load string types: ${error.message}`)
     return data || []
   }
+  
+  private async loadProjectStringCommands(): Promise<StringCommand[]> {
+    const { data, error } = await db.stringCommands.getByProject(this.project.id)
+    if (error) throw new Error(`Failed to load string commands: ${error.message}`)
+    return data || []
+  }
 
   private async loadProjectStructs(): Promise<Struct[]> {
     const { data, error } = await db.structs.getByProject(this.project.id)
@@ -323,17 +330,30 @@ export class BuildOrchestrator {
     return result
   }
 
-  private convertStringTypesToDbFormat(stringTypes: StringType[]): Record<string, DbStringType> {
+  private convertStringTypesToDbFormat(stringTypes: StringType[], stringCommands: StringCommand[]): Record<string, DbStringType> {
     // Convert Scribe string types to DbStringType format
-    const result: Record<string, any> = {}
+    const result: Record<string, DbStringType> = {}
+    const lookup: Record<string, DbStringType> = {};
     stringTypes.forEach(stringType => {
-      result[stringType.name] = {
+      result[stringType.name] = lookup[stringType.id] = {
         name: stringType.name,
         delimiter: stringType.delimiter || '',
         shiftType: stringType.shiftType || 'none',
         terminator: stringType.terminator || 0,
-        greedy: stringType.greedy || false,
-        characterMap: stringType.characterMap || []
+        greedyTerminator: stringType.greedy || false,
+        commands: {},
+        characterMap: stringType.characterMap || [],
+        layers: []
+      }
+    })
+    stringCommands.forEach(stringCommand => {
+      lookup[stringCommand.stringTypeId].commands[stringCommand.code] = {
+        key: stringCommand.code,
+        value: stringCommand.mnemonic,
+        types: stringCommand.types.map(type => type as MemberType) || [],
+        delimiter: stringCommand.delimiter || 0,
+        halt: stringCommand.halt || false,
+        set: stringCommand.stringTypeId
       }
     })
     return result
