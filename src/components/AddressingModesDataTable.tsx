@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../stores/auth-store'
+import { usePlatformPermissions } from '../hooks/usePlatformPermissions'
 import { db, supabase } from '../lib/supabase'
 import type { AddressingMode } from '@prisma/client'
 import DataTable, { type DataTableProps, type ColumnDefinition } from './DataTable'
@@ -9,12 +10,13 @@ interface AddressingModesDataTableProps extends Omit<DataTableProps<AddressingMo
   columns: ColumnDefinition<AddressingMode>[]
 }
 
-export default function AddressingModesDataTable({ 
-  platformId, 
-  columns, 
-  ...props 
+export default function AddressingModesDataTable({
+  platformId,
+  columns,
+  ...props
 }: AddressingModesDataTableProps) {
   const { user } = useAuthStore()
+  const { canManage } = usePlatformPermissions(platformId)
   const [data, setData] = useState<AddressingMode[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -158,9 +160,9 @@ export default function AddressingModesDataTable({
       columns={columns}
       loading={loading}
       error={error}
-      onAdd={handleAdd}
-      onEdit={handleEdit}
-      onDelete={handleDelete}
+      onAdd={canManage ? handleAdd : undefined}
+      onEdit={canManage ? handleEdit : undefined}
+      onDelete={canManage ? handleDelete : undefined}
       onRefresh={handleRefresh}
     />
   )

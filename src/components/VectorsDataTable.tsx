@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../stores/auth-store'
+import { usePlatformPermissions } from '../hooks/usePlatformPermissions'
 import { db, supabase } from '../lib/supabase'
 import type { Vector } from '@prisma/client'
 import DataTable, { type DataTableProps, type ColumnDefinition } from './DataTable'
@@ -9,12 +10,13 @@ interface VectorsDataTableProps extends Omit<DataTableProps<Vector>, 'data' | 'c
   columns: ColumnDefinition<Vector>[]
 }
 
-export default function VectorsDataTable({ 
-  platformId, 
-  columns, 
-  ...props 
+export default function VectorsDataTable({
+  platformId,
+  columns,
+  ...props
 }: VectorsDataTableProps) {
   const { user } = useAuthStore()
+  const { canManage } = usePlatformPermissions(platformId)
   const [data, setData] = useState<Vector[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -146,9 +148,9 @@ export default function VectorsDataTable({
       columns={columns}
       loading={loading}
       error={error}
-      onAdd={handleAdd}
-      onEdit={handleEdit}
-      onDelete={handleDelete}
+      onAdd={canManage ? handleAdd : undefined}
+      onEdit={canManage ? handleEdit : undefined}
+      onDelete={canManage ? handleDelete : undefined}
       onRefresh={handleRefresh}
     />
   )

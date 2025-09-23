@@ -85,7 +85,7 @@ function App() {
           element={<PlatformDetailPage />}
         />
         <Route
-          path="/platform/:id/:section"
+          path="/platforms/:id/:section"
           element={
             <ProtectedRoute>
               <PlatformSectionPage />

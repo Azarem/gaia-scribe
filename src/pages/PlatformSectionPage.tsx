@@ -24,11 +24,18 @@ function PlatformSectionContent({ sectionKey, sectionName, platform }: PlatformS
         <AddressingModesDataTable
           platformId={platform.id}
           columns={[
-            { key: 'name', label: 'Name', sortable: true },
-            { key: 'code', label: 'Code', sortable: true },
-            { key: 'size', label: 'Size', sortable: true, render: (value) => `${value} bytes` },
-            { key: 'format', label: 'Format', sortable: true },
-            { key: 'pattern', label: 'Pattern', sortable: true },
+            { key: 'name', label: 'Name', sortable: true, editable: true, type: 'text' },
+            { key: 'code', label: 'Code', sortable: true, editable: true, type: 'text' },
+            {
+              key: 'size',
+              label: 'Size',
+              sortable: true,
+              editable: true,
+              type: 'number',
+              render: (value) => `${value} bytes`
+            },
+            { key: 'format', label: 'Format', sortable: true, editable: true, type: 'text' },
+            { key: 'pattern', label: 'Pattern', sortable: true, editable: true, type: 'text' },
           ]}
           searchPlaceholder="Search addressing modes..."
           addButtonText="Add Addressing Mode"
@@ -47,10 +54,12 @@ function PlatformSectionContent({ sectionKey, sectionName, platform }: PlatformS
               width: '40',
               render: () => null // Handled by the component
             },
-            { key: 'name', label: 'Group Name', sortable: true },
+            { key: 'name', label: 'Group Name', sortable: true, editable: true, type: 'text' },
             {
               key: 'meta',
               label: 'Description',
+              editable: true,
+              type: 'textarea',
               render: (value) => value?.description || '-'
             },
           ]}
@@ -65,16 +74,20 @@ function PlatformSectionContent({ sectionKey, sectionName, platform }: PlatformS
         <VectorsDataTable
           platformId={platform.id}
           columns={[
-            { key: 'name', label: 'Name', sortable: true },
+            { key: 'name', label: 'Name', sortable: true, editable: true, type: 'text' },
             {
               key: 'address',
               label: 'Address',
               sortable: true,
+              editable: true,
+              type: 'number',
               render: (value) => `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
             },
             {
               key: 'isEntry',
               label: 'Entry Point',
+              editable: true,
+              type: 'boolean',
               render: (value) => value ? 'Yes' : 'No'
             },
           ]}

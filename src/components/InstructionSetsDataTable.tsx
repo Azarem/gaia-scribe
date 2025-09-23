@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../stores/auth-store'
+import { usePlatformPermissions } from '../hooks/usePlatformPermissions'
 import { db, supabase } from '../lib/supabase'
-import type { InstructionGroup, InstructionCode } from '@prisma/client'
+import type { InstructionGroup, InstructionCode, AddressingMode } from '@prisma/client'
 import DataTable, { type DataTableProps, type ColumnDefinition } from './DataTable'
 
 interface InstructionGroupWithCodes extends InstructionGroup {
@@ -14,20 +15,22 @@ interface InstructionSetsDataTableProps extends Omit<DataTableProps<InstructionG
   columns: ColumnDefinition<InstructionGroupWithCodes>[]
 }
 
-export default function InstructionSetsDataTable({ 
-  platformId, 
-  columns, 
-  ...props 
+export default function InstructionSetsDataTable({
+  platformId,
+  columns,
+  ...props
 }: InstructionSetsDataTableProps) {
   const { user } = useAuthStore()
+  const { canManage } = usePlatformPermissions(platformId)
   const [data, setData] = useState<InstructionGroupWithCodes[]>([])
   const [instructionCodes, setInstructionCodes] = useState<{ [groupId: string]: InstructionCode[] }>({})
+  const [addressingModes, setAddressingModes] = useState<AddressingMode[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [codesLoading, setCodesLoading] = useState(false)
 
-  // Load instruction groups
+  // Load instruction groups and addressing modes
   const loadData = useCallback(async () => {
     if (!platformId) {
       setLoading(false)
@@ -38,13 +41,21 @@ export default function InstructionSetsDataTable({
       setLoading(true)
       setError(null)
 
-      const groupsResult = await db.instructionGroups.getByPlatform(platformId)
+      const [groupsResult, modesResult] = await Promise.all([
+        db.instructionGroups.getByPlatform(platformId),
+        db.addressingModes.getByPlatform(platformId)
+      ])
 
       if (groupsResult.error) {
         throw new Error(groupsResult.error.message)
       }
 
+      if (modesResult.error) {
+        throw new Error(modesResult.error.message)
+      }
+
       setData(groupsResult.data || [])
+      setAddressingModes(modesResult.data || [])
     } catch (err) {
       console.error('Error loading instruction groups:', err)
       setError(err instanceof Error ? err.message : 'Failed to load instruction groups')
@@ -253,6 +264,111 @@ export default function InstructionSetsDataTable({
     setExpandedGroups(new Set()) // Collapse all
   }
 
+  // Create instruction codes sub-table component
+  const renderInstructionCodesTable = (group: InstructionGroupWithCodes) => {
+    const codes = instructionCodes[group.id] || []
+
+    // CRUD handlers for instruction codes
+    const handleAddCode = async (newCode: Partial<InstructionCode>) => {
+      if (!user?.id) throw new Error('User not authenticated')
+
+      const codeData = {
+        code: newCode.code || 0,
+        cycles: newCode.cycles || 1,
+        modeId: newCode.modeId,
+        meta: newCode.meta,
+        groupId: group.id
+      }
+
+      const { data: created, error } = await db.instructionCodes.create(codeData, user.id)
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      return created
+    }
+
+    const handleEditCode = async (id: string, updates: Partial<InstructionCode>) => {
+      if (!user?.id) throw new Error('User not authenticated')
+
+      // Clean updates to match expected type
+      const cleanUpdates = {
+        code: updates.code,
+        cycles: updates.cycles || undefined,
+        modeId: updates.modeId,
+        meta: updates.meta,
+        groupId: updates.groupId
+      }
+
+      const { data: updated, error } = await db.instructionCodes.update(id, cleanUpdates, user.id)
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      return updated
+    }
+
+    const handleDeleteCode = async (id: string) => {
+      if (!user?.id) throw new Error('User not authenticated')
+
+      const { error } = await db.instructionCodes.delete(id, user.id)
+
+      if (error) {
+        throw new Error(error.message)
+      }
+    }
+
+    const codeColumns: ColumnDefinition<InstructionCode>[] = [
+      {
+        key: 'code',
+        label: 'Code',
+        sortable: true,
+        editable: true,
+        type: 'number',
+        render: (value) => `0x${value.toString(16).toUpperCase().padStart(2, '0')}`
+      },
+      {
+        key: 'cycles',
+        label: 'Cycles',
+        sortable: true,
+        editable: true,
+        type: 'number'
+      },
+      {
+        key: 'modeId',
+        label: 'Mode',
+        sortable: true,
+        editable: true,
+        type: 'select',
+        options: addressingModes.map(mode => ({ value: mode.id, label: mode.name })),
+        render: (value) => {
+          const mode = addressingModes.find(m => m.id === value)
+          return mode ? mode.name : 'Unknown'
+        }
+      }
+    ]
+
+    return (
+      <div className="px-6 py-4 bg-gray-50">
+        <div className="text-sm font-medium text-gray-700 mb-3">Instruction Codes for {group.name}:</div>
+        <DataTable
+          data={codes}
+          columns={codeColumns}
+          loading={codesLoading}
+          onAdd={canManage ? handleAddCode : undefined}
+          onEdit={canManage ? handleEditCode : undefined}
+          onDelete={canManage ? handleDeleteCode : undefined}
+          searchPlaceholder="Search instruction codes..."
+          addButtonText="Add Instruction Code"
+          emptyMessage="No instruction codes defined for this group."
+          className="bg-white"
+        />
+      </div>
+    )
+  }
+
   return (
     <DataTable
       {...props}
@@ -260,38 +376,12 @@ export default function InstructionSetsDataTable({
       columns={enhancedColumns}
       loading={loading}
       error={error}
-      onAdd={handleAdd}
-      onEdit={handleEdit}
-      onDelete={handleDelete}
+      onAdd={canManage ? handleAdd : undefined}
+      onEdit={canManage ? handleEdit : undefined}
+      onDelete={canManage ? handleDelete : undefined}
       onRefresh={handleRefresh}
       expandedRows={expandedGroups}
-      renderExpandedContent={(group: InstructionGroupWithCodes) => {
-        const codes = instructionCodes[group.id] || []
-
-        return (
-          <div className="px-6 py-2 bg-gray-50">
-            <div className="text-sm font-medium text-gray-700 mb-3">Instruction Codes:</div>
-            {codesLoading ? (
-              <div className="text-sm text-gray-500">Loading codes...</div>
-            ) : codes.length === 0 ? (
-              <div className="text-sm text-gray-500">No instruction codes defined for this group.</div>
-            ) : (
-              <div className="space-y-2">
-                {codes.map((code) => (
-                  <div key={code.id} className="flex items-center justify-between bg-white p-2 rounded border">
-                    <div className="flex items-center space-x-4">
-                      <span className="font-mono text-sm">0x{code.code.toString(16).toUpperCase().padStart(2, '0')}</span>
-                      <span className="text-sm text-gray-600">
-                        {code.cycles ? `${code.cycles} cycles` : 'Variable cycles'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      }}
+      renderExpandedContent={renderInstructionCodesTable}
     />
   )
 }
