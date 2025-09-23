@@ -975,9 +975,22 @@ export const db = {
           meta: artifact.meta,
           createdBy: artifact.createdBy,
           updatedBy: artifact.updatedBy,
-        })
+        }, { onConflict: 'blockId' })
         .select()
         .single()
+    },
+
+    async bulkUpsert(artifacts: Array<{ blockId: string; content: string; meta?: any; createdBy: string; updatedBy: string }>) {
+      return (supabase as any)
+        .from('BlockArtifact')
+        .upsert(artifacts.map(artifact => ({
+          blockId: artifact.blockId,
+          content: artifact.content,
+          meta: artifact.meta,
+          createdBy: artifact.createdBy,
+          updatedBy: artifact.updatedBy,
+        })), { onConflict: 'blockId' })
+        .select()
     },
 
     async delete(id: string, userId: string) {

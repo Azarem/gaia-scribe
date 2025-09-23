@@ -386,30 +386,30 @@ export class BuildOrchestrator {
     const { user } = useAuthStore.getState()
     if (!user) throw new Error('User not authenticated')
 
-    for (const artifact of artifacts) {
-      try {
-        // Find the actual block by name to get the ID
-        const { data: blocks, error: blockError } = await db.blocks.getByProject(this.project.id)
-        if (blockError) throw new Error(`Failed to find block: ${blockError.message}`)
+    if (artifacts.length === 0) return
 
-        const block = blocks?.find(b => b.name === artifact.blockName)
-        if (!block) {
-          console.warn(`Block not found for artifact: ${artifact.blockName}`)
-          continue
-        }
+    try {
+      // Prepare artifacts for bulk upsert
+      const artifactsToUpsert = artifacts.map(artifact => ({
+        blockId: artifact.blockId,
+        content: artifact.content,
+        meta: null,
+        createdBy: user.id,
+        updatedBy: user.id
+      }))
 
-        // Store or update the artifact
-        await db.blockArtifacts.upsert({
-          blockId: block.id,
-          content: artifact.content,
-          meta: null,
-          createdBy: user.id,
-          updatedBy: user.id
-        })
-      } catch (error) {
-        console.error(`Failed to store artifact for block ${artifact.blockName}:`, error)
-        throw error
+      // Perform bulk upsert
+      const { error } = await db.blockArtifacts.bulkUpsert(artifactsToUpsert)
+
+      if (error) {
+        console.error('Failed to store artifacts:', error)
+        throw new Error(`Failed to store artifacts: ${error.message}`)
       }
+
+      console.log(`Successfully stored ${artifacts.length} artifacts`)
+    } catch (error) {
+      console.error('Failed to store artifacts:', error)
+      throw error
     }
   }
 
