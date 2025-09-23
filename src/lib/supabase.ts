@@ -1598,7 +1598,7 @@ export const db = {
         .single()
     },
 
-    async create(platform: { name: string; isPublic?: boolean; meta?: any }, userId: string) {
+    async create(platform: { name: string; isPublic?: boolean; meta?: any; platformBranchId?: string }, userId: string) {
       const platformId = createId()
       return (supabase as any)
         .from('Platform')
@@ -1607,6 +1607,7 @@ export const db = {
           name: platform.name,
           isPublic: platform.isPublic || false,
           meta: platform.meta,
+          platformBranchId: platform.platformBranchId,
           createdBy: userId,
         })
         .select()
@@ -1635,6 +1636,171 @@ export const db = {
         .eq('id', id)
         .eq('createdBy', userId) // Only allow deletion by owner
     },
+  },
+
+  // Addressing Modes
+  addressingModes: {
+    async getByPlatform(platformId: string) {
+      return supabase
+        .from('AddressingMode')
+        .select('*')
+        .eq('platformId', platformId)
+        .is('deletedAt', null)
+        .order('name', { ascending: true })
+    },
+
+    async create(addressingMode: any, userId: string) {
+      const id = createId()
+      return supabase
+        .from('AddressingMode')
+        .insert({
+          id,
+          ...addressingMode,
+          createdBy: userId,
+        })
+        .select()
+        .single()
+    },
+
+    async createBatch(addressingModes: any[], userId: string) {
+      const addressingModesToInsert = addressingModes.map(mode => ({
+        id: createId(),
+        ...mode,
+        createdBy: userId,
+      }))
+
+      return supabase
+        .from('AddressingMode')
+        .insert(addressingModesToInsert)
+        .select()
+    }
+  },
+
+  // Instruction Groups
+  instructionGroups: {
+    async getByPlatform(platformId: string) {
+      return supabase
+        .from('InstructionGroup')
+        .select('*')
+        .eq('platformId', platformId)
+        .is('deletedAt', null)
+        .order('name', { ascending: true })
+    },
+
+    async create(instructionGroup: any, userId: string) {
+      const id = createId()
+      return supabase
+        .from('InstructionGroup')
+        .insert({
+          id,
+          ...instructionGroup,
+          createdBy: userId,
+        })
+        .select()
+        .single()
+    },
+
+    async createBatch(instructionGroups: any[], userId: string) {
+      const instructionGroupsToInsert = instructionGroups.map(group => ({
+        id: createId(),
+        ...group,
+        createdBy: userId,
+      }))
+
+      return supabase
+        .from('InstructionGroup')
+        .insert(instructionGroupsToInsert)
+        .select()
+    }
+  },
+
+  // Instruction Codes
+  instructionCodes: {
+    async getByGroup(groupId: string) {
+      return supabase
+        .from('InstructionCode')
+        .select('*')
+        .eq('groupId', groupId)
+        .is('deletedAt', null)
+        .order('code', { ascending: true })
+    },
+
+    async getByPlatform(platformId: string) {
+      return supabase
+        .from('InstructionCode')
+        .select(`
+          *,
+          group:InstructionGroup!inner(id, name, platformId),
+          mode:AddressingMode!inner(id, name, code)
+        `)
+        .eq('group.platformId', platformId)
+        .is('deletedAt', null)
+        .order('code', { ascending: true })
+    },
+
+    async create(instructionCode: any, userId: string) {
+      const id = createId()
+      return supabase
+        .from('InstructionCode')
+        .insert({
+          id,
+          ...instructionCode,
+          createdBy: userId,
+        })
+        .select()
+        .single()
+    },
+
+    async createBatch(instructionCodes: any[], userId: string) {
+      const instructionCodesToInsert = instructionCodes.map(code => ({
+        id: createId(),
+        ...code,
+        createdBy: userId,
+      }))
+
+      return supabase
+        .from('InstructionCode')
+        .insert(instructionCodesToInsert)
+        .select()
+    }
+  },
+
+  // Vectors
+  vectors: {
+    async getByPlatform(platformId: string) {
+      return supabase
+        .from('Vector')
+        .select('*')
+        .eq('platformId', platformId)
+        .is('deletedAt', null)
+        .order('address', { ascending: true })
+    },
+
+    async create(vector: any, userId: string) {
+      const id = createId()
+      return supabase
+        .from('Vector')
+        .insert({
+          id,
+          ...vector,
+          createdBy: userId,
+        })
+        .select()
+        .single()
+    },
+
+    async createBatch(vectors: any[], userId: string) {
+      const vectorsToInsert = vectors.map(vector => ({
+        id: createId(),
+        ...vector,
+        createdBy: userId,
+      }))
+
+      return supabase
+        .from('Vector')
+        .insert(vectorsToInsert)
+        .select()
+    }
   },
 
   // External project search (for importing from public API via HTTP)

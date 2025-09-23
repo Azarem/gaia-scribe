@@ -9,8 +9,9 @@
  * 5. Handle errors and provide feedback
  */
 
-import { db } from './supabase'
+import { db, createWorkingClient } from './supabase'
 import { logger } from './logger'
+import { createId } from '@paralleldrive/cuid2'
 
 /**
  * Progress callback for import operations
@@ -25,6 +26,13 @@ export interface PlatformImportResult {
   platformId?: string
   platformName?: string
   error?: string
+  importDetails?: {
+    platformCreated: boolean
+    addressingModesCreated: number
+    instructionGroupsCreated: number
+    instructionCodesCreated: number
+    vectorsCreated: number
+  }
 }
 
 /**
@@ -48,36 +56,82 @@ export interface ExternalPlatformBranchData {
 }
 
 /**
- * Transform external PlatformBranch data to internal Platform format
+ * Transform external PlatformBranch data to internal Platform format with nested data
  */
 export function transformPlatformBranchToInternal(
   externalData: ExternalPlatformBranchData,
   _userId: string,
   platformName: string
 ) {
+  // Extract and transform addressing modes
+  const addressingModes = typeof externalData.addressingModes === 'object'
+    ? Object.entries(externalData.addressingModes).map(([modeName, modeData]: [string, any]) => ({
+        name: modeName || '',
+        code: modeData.shorthand || '',
+        size: modeData.size || 1,
+        format: modeData.formatString || null,
+        pattern: modeData.parseRegex || null,
+        meta: modeData.meta || null
+      }))
+    : []
+
+  const instructionCodes : { groupName: string, modeName: string, code: number }[] = []
+
+  // Extract and transform instruction groups
+  const instructionGroups = typeof externalData.instructionSet === 'object'
+    ? Object.entries(externalData.instructionSet).map(([groupName, groupData]: [string, any]) => 
+      {
+        if(typeof groupData === 'object') {
+          for(const [modeName, code] of Object.entries(groupData)) {
+            instructionCodes.push({
+              groupName,
+              modeName,
+              code: code as number
+            })
+          }
+        }
+        return {
+          name: groupName || '',
+          meta: groupData.meta || null
+        };
+      })
+    : []
+
+  // Extract and transform vectors
+  const vectors = Array.isArray(externalData.vectors)
+    ? externalData.vectors.map((vector: any) => ({
+        name: vector.name || '',
+        address: vector.address || 0,
+        isEntry: vector.isEntry || false,
+        meta: vector.meta || null
+      }))
+    : []
+
   return {
-    name: platformName,
-    isPublic: false, // Always private by default
-    meta: {
-      importedFrom: 'platformBranch',
-      originalPlatformBranchId: externalData.id,
-      originalPlatformId: externalData.platformId,
-      originalPlatformName: externalData.platform.name,
-      branchName: externalData.name,
-      branchVersion: externalData.version,
-      
-      // Platform technical configuration
-      addressingModes: externalData.addressingModes,
-      instructionSet: externalData.instructionSet,
-      vectors: externalData.vectors,
-      
-      // Original platform metadata
-      originalPlatformMeta: externalData.platform.meta,
-      
-      // Import metadata
-      importedAt: new Date().toISOString(),
-      importSource: 'external-platform-branch'
-    }
+    platform: {
+      name: platformName,
+      isPublic: false, // Always private by default
+      platformBranchId: externalData.id,
+      meta: {
+        importedFrom: 'platformBranch',
+        originalPlatformBranchId: externalData.id,
+        originalPlatformId: externalData.platformId,
+        originalPlatformName: externalData.platform.name,
+        branchName: externalData.name,
+        branchVersion: externalData.version,
+
+        // Original platform metadata
+        originalPlatformMeta: externalData.platform.meta,
+
+        // Import metadata
+        importedAt: new Date().toISOString(),
+        importSource: 'external-platform-branch'
+      }
+    },
+    addressingModes,
+    instructionGroups,
+    instructionCodes,
+    vectors
   }
 }
 
@@ -87,16 +141,43 @@ export function transformPlatformBranchToInternal(
 export function validatePlatformData(platformData: any): { valid: boolean; errors: string[] } {
   const errors: string[] = []
 
-  if (!platformData.name || typeof platformData.name !== 'string' || platformData.name.trim().length === 0) {
+  if (!platformData.platform) {
+    errors.push('Platform data is required')
+    return { valid: false, errors }
+  }
+
+  const platform = platformData.platform
+
+  if (!platform.name || typeof platform.name !== 'string' || platform.name.trim().length === 0) {
     errors.push('Platform name is required')
   }
 
-  if (platformData.name && platformData.name.length > 100) {
+  if (platform.name && platform.name.length > 100) {
     errors.push('Platform name must be 100 characters or less')
   }
 
-  if (typeof platformData.isPublic !== 'boolean') {
+  if (typeof platform.isPublic !== 'boolean') {
     errors.push('isPublic must be a boolean value')
+  }
+
+  // Validate addressing modes
+  if (platformData.addressingModes && !Array.isArray(platformData.addressingModes)) {
+    errors.push('Addressing modes must be an array')
+  }
+
+  // Validate instruction groups
+  if (platformData.instructionGroups && !Array.isArray(platformData.instructionGroups)) {
+    errors.push('Instruction groups must be an array')
+  }
+
+  // Validate vectors
+  if (platformData.vectors && !Array.isArray(platformData.vectors)) {
+    errors.push('Vectors must be an array')
+  }
+
+  // Validate instruction codes
+  if (platformData.instructionCodes && !Array.isArray(platformData.instructionCodes)) {
+    errors.push('Instruction codes must be an array')
   }
 
   return {
@@ -110,7 +191,7 @@ export function validatePlatformData(platformData: any): { valid: boolean; error
  */
 export class PlatformImportOrchestrator {
   /**
-   * Import a complete platform from external PlatformBranch
+   * Import a complete platform from external PlatformBranch with all nested data
    *
    * @param platformBranchId - External PlatformBranch ID to import
    * @param userId - ID of the user performing the import
@@ -125,7 +206,7 @@ export class PlatformImportOrchestrator {
     onProgress?: PlatformImportProgressCallback
   ): Promise<PlatformImportResult> {
     try {
-      onProgress?.('Fetching external PlatformBranch data...', 1, 4)
+      onProgress?.('Fetching external PlatformBranch data...', 1, 8)
 
       // Step 1: Fetch complete external PlatformBranch data
       logger.platform.import('Fetching external PlatformBranch data', { platformBranchId })
@@ -138,7 +219,7 @@ export class PlatformImportOrchestrator {
         }
       }
 
-      onProgress?.('Transforming platform data...', 2, 4)
+      onProgress?.('Transforming platform data...', 2, 8)
 
       // Step 2: Transform external data to internal format
       logger.platform.import('Transforming PlatformBranch data to internal format')
@@ -148,12 +229,12 @@ export class PlatformImportOrchestrator {
         platformName
       )
 
-      onProgress?.('Validating platform data...', 3, 4)
+      onProgress?.('Validating platform data...', 3, 8)
 
       // Step 3: Validate transformed data
       logger.platform.import('Validating transformed platform data')
       const validation = validatePlatformData(internalPlatformData)
-      
+
       if (!validation.valid) {
         return {
           success: false,
@@ -161,12 +242,12 @@ export class PlatformImportOrchestrator {
         }
       }
 
-      onProgress?.('Creating platform...', 4, 4)
+      onProgress?.('Creating platform...', 4, 8)
 
-      // Step 4: Create the platform in the database
+      // Step 4: Create the main platform record
       logger.platform.import('Creating platform in database')
       const { data: newPlatform, error: createError } = await db.platforms.create(
-        internalPlatformData,
+        internalPlatformData.platform,
         userId
       )
 
@@ -177,19 +258,184 @@ export class PlatformImportOrchestrator {
         }
       }
 
-      logger.platform.import('Platform import completed successfully', { platformId: newPlatform.id })
+      logger.platform.import('Platform created successfully', { platformId: newPlatform.id })
 
-      return {
-        success: true,
-        platformId: newPlatform.id,
-        platformName: newPlatform.name
-      }
+      // Now import all the nested data structures
+      return await this.importPlatformNestedData(
+        newPlatform.id,
+        internalPlatformData,
+        userId,
+        onProgress
+      )
 
     } catch (error) {
       logger.platform.error('import orchestrator', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred during import'
+      }
+    }
+  }
+
+  /**
+   * Import all nested platform data structures
+   *
+   * @param platformId - ID of the created platform
+   * @param internalData - Transformed platform data
+   * @param userId - User ID performing the import
+   * @param onProgress - Optional progress callback
+   * @returns Promise<PlatformImportResult>
+   */
+  private async importPlatformNestedData(
+    platformId: string,
+    internalData: any,
+    userId: string,
+    onProgress?: PlatformImportProgressCallback
+  ): Promise<PlatformImportResult> {
+    try {
+      const supabase = createWorkingClient()
+
+      const importDetails = {
+        platformCreated: true,
+        addressingModesCreated: 0,
+        instructionGroupsCreated: 0,
+        instructionCodesCreated: 0,
+        vectorsCreated: 0
+      }
+
+      onProgress?.('Importing addressing modes...', 5, 8)
+
+      // Step 5: Import Addressing Modes
+      let addressingModeMap: { [key: string]: string } = {}
+      if (internalData.addressingModes && internalData.addressingModes.length > 0) {
+        logger.platform.import(`Importing ${internalData.addressingModes.length} addressing modes`)
+
+        const addressingModesToInsert = internalData.addressingModes.map((mode: any) => {
+          const id = createId();
+          addressingModeMap[mode.name] = id;
+          return {
+            id,
+            ...mode,
+            platformId: platformId,
+            createdBy: userId
+          };
+        });
+
+        const { error: addressingModesError } = await supabase
+          .from('AddressingMode')
+          .insert(addressingModesToInsert)
+
+        if (addressingModesError) {
+          logger.platform.error('Failed to insert addressing modes', addressingModesError)
+        } else {
+          importDetails.addressingModesCreated = addressingModesToInsert.length
+          logger.platform.import(`Successfully imported ${addressingModesToInsert.length} addressing modes`)
+        }
+      }
+
+      onProgress?.('Importing instruction groups...', 6, 8)
+
+      // Step 6: Import Instruction Groups
+      let instructionGroupMap: { [key: string]: string } = {}
+      if (internalData.instructionGroups && internalData.instructionGroups.length > 0) {
+        logger.platform.import(`Importing ${internalData.instructionGroups.length} instruction groups`)
+
+        const instructionGroupsToInsert = internalData.instructionGroups.map((group: any) => {
+          const id = createId()
+          instructionGroupMap[group.name] = id // Map name to ID for instruction codes
+          return {
+            id,
+            ...group,
+            platformId: platformId,
+            createdBy: userId
+          }
+        })
+
+        const { error: instructionGroupsError } = await supabase
+          .from('InstructionGroup')
+          .insert(instructionGroupsToInsert)
+
+        if (instructionGroupsError) {
+          logger.platform.error('Failed to insert instruction groups', instructionGroupsError)
+        } else {
+          importDetails.instructionGroupsCreated = instructionGroupsToInsert.length
+          logger.platform.import(`Successfully imported ${instructionGroupsToInsert.length} instruction groups`)
+        }
+      }
+
+      onProgress?.('Importing vectors...', 7, 8)
+
+      // Step 7: Import Vectors
+      if (internalData.vectors && internalData.vectors.length > 0) {
+        logger.platform.import(`Importing ${internalData.vectors.length} vectors`)
+
+        const vectorsToInsert = internalData.vectors.map((vector: any) => ({
+          id: createId(),
+          ...vector,
+          platformId: platformId,
+          createdBy: userId
+        }))
+
+        const { error: vectorsError } = await supabase
+          .from('Vector')
+          .insert(vectorsToInsert)
+
+        if (vectorsError) {
+          logger.platform.error('Failed to insert vectors', vectorsError)
+        } else {
+          importDetails.vectorsCreated = vectorsToInsert.length
+          logger.platform.import(`Successfully imported ${vectorsToInsert.length} vectors`)
+        }
+      }
+
+      onProgress?.('Importing instruction codes...', 8, 8)
+
+      // Step 8: Import Instruction Codes (requires addressing modes and instruction groups)
+      if (internalData.instructionCodes && internalData.instructionCodes.length > 0) {
+        logger.platform.import(`Importing ${internalData.instructionCodes.length} instruction codes`)
+
+
+        const instructionCodesToInsert = internalData.instructionCodes.map((code: any) => ({
+          id: createId(),
+          code: code.code,
+          cycles: code.cycles,
+          meta: code.meta,
+          groupId: instructionGroupMap[code.groupName],
+          modeId: addressingModeMap[code.modeName],
+          createdBy: userId
+        }));
+
+        if (instructionCodesToInsert.length > 0) {
+          const { error: instructionCodesError } = await supabase
+            .from('InstructionCode')
+            .insert(instructionCodesToInsert)
+
+          if (instructionCodesError) {
+            logger.platform.error('Failed to insert instruction codes', instructionCodesError)
+          } else {
+            importDetails.instructionCodesCreated = instructionCodesToInsert.length
+            logger.platform.import(`Successfully imported ${instructionCodesToInsert.length} instruction codes`)
+          }
+        }
+      }
+
+      logger.platform.import('Platform import completed successfully', {
+        platformId,
+        importDetails
+      })
+
+      return {
+        success: true,
+        platformId: platformId,
+        platformName: internalData.platform.name,
+        importDetails
+      }
+
+    } catch (error) {
+      logger.platform.error('importing platform nested data', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred during nested data import'
       }
     }
   }
