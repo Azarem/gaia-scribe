@@ -10,7 +10,7 @@
  */
 
 import { BlockReader, BlockWriter } from '@gaialabs/core'
-import { BinType } from '@gaialabs/shared'
+import { BinType, CompressionRegistry } from '@gaialabs/shared'
 import type { DbRoot } from '@gaialabs/shared'
 import { db } from './supabase'
 import { useAuthStore } from '../stores/auth-store'
@@ -193,7 +193,7 @@ export class BuildOrchestrator {
       opCodes: {},
       opLookup: {},
       addrLookup: {},
-      compression: null as any // Will be set by BlockReader if needed
+      compression: CompressionRegistry.get('QuintetLZ')
     }
 
     return dbRoot
