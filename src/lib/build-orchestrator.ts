@@ -10,7 +10,7 @@
  */
 
 import { BlockReader, BlockWriter } from '@gaialabs/core'
-import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbStringType, DbStruct, MemberType } from '@gaialabs/shared'
+import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbRootUtils, DbStringType, DbStruct, MemberType } from '@gaialabs/shared'
 import { type DbRoot, OpCode } from '@gaialabs/shared'
 import { db } from './supabase'
 import { useAuthStore } from '../stores/auth-store'
@@ -71,7 +71,7 @@ export class BuildOrchestrator {
 
       // Step 2: Construct DbRoot
       this.reportProgress('Constructing database root...', 2, 6)
-      const dbRoot = await this.constructDbRoot()
+      const dbRoot = await DbRootUtils.fromSupabaseGameRom("Illusion of Gaia");// await this.constructDbRoot()
 
       // Step 3: Create BlockReader and analyze
       this.reportProgress('Analyzing ROM blocks...', 3, 6)
