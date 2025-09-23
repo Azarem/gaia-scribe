@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
 import { Upload, AlertCircle, File, Trash2 } from 'lucide-react'
+import { decodeBase64, encodeBase64 } from '@gaialabs/shared'
 
 // ROM file metadata for persistence
 interface RomFileMetadata {
@@ -28,7 +29,7 @@ class RomFileManager {
         name: file.name,
         size: file.size,
         lastModified: file.lastModified,
-        data: btoa(String.fromCharCode(...data)) // Convert to base64
+        data: encodeBase64(data) // Convert to base64
       }
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(metadata))
     } catch (error) {
@@ -44,11 +45,7 @@ class RomFileManager {
       const metadata: RomFileMetadata = JSON.parse(saved)
 
       // Convert base64 back to Uint8Array
-      const binaryString = atob(metadata.data)
-      const data = new Uint8Array(binaryString.length)
-      for (let i = 0; i < binaryString.length; i++) {
-        data[i] = binaryString.charCodeAt(i)
-      }
+      const data = decodeBase64(metadata.data)
 
       // Create a File object from the metadata
       const file = new (File as any)([data], metadata.name, {
