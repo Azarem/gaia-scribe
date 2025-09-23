@@ -5,7 +5,7 @@ import { Search, Download, Calendar, Eye, Tag } from 'lucide-react'
 import { db } from '../lib/supabase'
 import { createImportOrchestrator, type ImportProgressCallback } from '../lib/import-orchestrator'
 
-import PlatformSelector from './PlatformSelector'
+import EnhancedPlatformSelector from './EnhancedPlatformSelector'
 import type { ScribeProject } from '@prisma/client'
 import type { GameRomBranchData } from '@gaialabs/shared'
 import clsx from 'clsx'
@@ -201,7 +201,7 @@ export default function ImportProjectModal({
             </div>
 
             {/* Platform Selection */}
-            <PlatformSelector
+            <EnhancedPlatformSelector
               selectedPlatformId={selectedPlatformId}
               onPlatformSelect={setSelectedPlatformId}
               requiredPlatformBranchId={selectedGameRomBranch.platformBranch.id}

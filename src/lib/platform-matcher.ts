@@ -19,7 +19,64 @@ export interface PlatformMatchResult {
 }
 
 /**
- * Find a platform by platformBranchId (strict matching)
+ * Find all platforms by platformBranchId (returns all matching platforms)
+ *
+ * @param platformBranchId - Platform branch ID from external GameRomBranch
+ * @returns Promise<{ success: boolean; platforms: Platform[]; error?: string }>
+ */
+export async function findAllPlatformsByBranchId(
+  platformBranchId: string
+): Promise<{ success: boolean; platforms: Platform[]; error?: string }> {
+  try {
+    logger.platform.loading('Finding all platforms by platformBranchId', {
+      platformBranchId
+    })
+
+    // Find all platforms with matching platformBranchId
+    const { data: platforms, error: searchError } = await db.platforms.getAll()
+
+    if (searchError) {
+      logger.platform.error('searching platforms by platformBranchId', searchError)
+      return {
+        success: false,
+        platforms: [],
+        error: 'Failed to search platforms'
+      }
+    }
+
+    // Look for all platforms that have the matching platformBranchId
+    const matchingPlatforms = platforms?.filter(platform =>
+      platform.platformBranchId === platformBranchId
+    ) || []
+
+    // Sort by most recently updated/created first
+    matchingPlatforms.sort((a, b) => {
+      const aDate = new Date(a.updatedAt || a.createdAt)
+      const bDate = new Date(b.updatedAt || b.createdAt)
+      return bDate.getTime() - aDate.getTime()
+    })
+
+    logger.platform.loading('Found platforms by platformBranchId', {
+      count: matchingPlatforms.length,
+      platformNames: matchingPlatforms.map(p => p.name)
+    })
+
+    return {
+      success: true,
+      platforms: matchingPlatforms
+    }
+  } catch (err) {
+    logger.platform.error('finding platforms by platformBranchId', err)
+    return {
+      success: false,
+      platforms: [],
+      error: 'Failed to find platforms'
+    }
+  }
+}
+
+/**
+ * Find a platform by platformBranchId (strict matching - returns first match for backward compatibility)
  *
  * @param platformBranchId - Platform branch ID from external GameRomBranch
  * @returns Promise<PlatformMatchResult>
@@ -28,25 +85,16 @@ export async function findPlatformByBranchId(
   platformBranchId: string
 ): Promise<PlatformMatchResult> {
   try {
-    logger.platform.loading('Finding platform by platformBranchId', {
-      platformBranchId
-    })
+    const result = await findAllPlatformsByBranchId(platformBranchId)
 
-    // Find platform with matching platformBranchId
-    const { data: platforms, error: searchError } = await db.platforms.getAll()
-
-    if (searchError) {
-      logger.platform.error('searching platforms by platformBranchId', searchError)
+    if (!result.success) {
       return {
         success: false,
-        error: 'Failed to search platforms'
+        error: result.error
       }
     }
 
-    // Look for a platform that has the matching platformBranchId
-    const matchingPlatform = platforms?.find(platform =>
-      platform.platformBranchId === platformBranchId
-    )
+    const matchingPlatform = result.platforms[0] // Get the most recent one
 
     if (matchingPlatform) {
       logger.platform.loading('Found platform by platformBranchId', {
