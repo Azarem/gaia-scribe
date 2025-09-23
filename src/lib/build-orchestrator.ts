@@ -78,7 +78,7 @@ export class BuildOrchestrator {
       
       // Step 3: Create BlockReader and analyze
       this.reportProgress('Analyzing ROM blocks...', 3, 6)
-      const blockReader = new BlockReader(romData, dbRoot)
+      const blockReader = new BlockReader(romData, dbRoot ?? internalRoot)
       const chunkFiles = blockReader.analyzeAndResolve()
 
       // Step 4: Generate ASM using BlockWriter
