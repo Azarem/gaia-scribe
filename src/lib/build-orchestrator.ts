@@ -10,7 +10,7 @@
  */
 
 import { BlockReader, BlockWriter } from '@gaialabs/core'
-import { BinType, CompressionRegistry } from '@gaialabs/shared'
+import { BinType, CompressionRegistry, DbBlock } from '@gaialabs/shared'
 import { type DbRoot, OpCode } from '@gaialabs/shared'
 import { db } from './supabase'
 import { useAuthStore } from '../stores/auth-store'
@@ -347,22 +347,24 @@ export class BuildOrchestrator {
     }))
   }
 
-  private convertBlocksToDbFormat(blocks: (Block & { parts: BlockPart[] })[]): any[] {
+  private convertBlocksToDbFormat(blocks: (Block & { parts: BlockPart[] })[]): DbBlock[] {
     // Convert Scribe blocks to DbBlock format
     return blocks.map(block => ({
       id: block.id,
       name: block.name,
       movable: block.movable || false,
-      group: block.group || null,
-      scene: block.scene || null,
-      postProcess: block.postProcess || null,
+      group: block.group || '',
+      scene: block.scene || '',
+      postProcess: block.postProcess || '',
       meta: block.meta || {},
       parts: block.parts.map(part => ({
         name: part.name,
-        location: part.location,
+        start: part.location,
+        end: part.location + part.size,
         size: part.size,
-        type: part.type,
-        index: part.index || 0
+        struct: part.type,
+        order: part.index || 0,
+        block: block.name
       }))
     }))
   }
