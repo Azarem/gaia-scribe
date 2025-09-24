@@ -517,11 +517,11 @@ function extractStructs(types: any): Omit<Struct, 'id' | 'projectId' | 'createdA
 
     structRecords.push({
       name: structName,
-      types: structData.types || [],
-      delimiter: structData.delimiter || null,
-      discriminator: structData.discriminator || null,
-      parent: structData.parent || null,
-      parts: structData.parts || [],
+      types: structData.types ?? [],
+      delimiter: structData.delimiter ?? null,
+      discriminator: structData.discriminator ?? null,
+      parent: structData.parent ?? null,
+      parts: structData.parts ?? [],
       meta: null,
       createdBy: '', // Will be set by caller
       updatedBy: null,
