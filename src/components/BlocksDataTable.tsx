@@ -912,7 +912,12 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {/* Existing Parts */}
-                    {parts.map((part, index) => {
+                    {parts.sort((a, b) => {
+                      const orderA = a.index ?? 0;
+                      const orderB = b.index ?? 0;
+                      if (orderA !== orderB) return orderA - orderB;
+                      return a.location - b.location;
+                    }).map((part, index) => {
                       const isEditing = editingPartId === part.id
                       return (
                         <tr key={part.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>

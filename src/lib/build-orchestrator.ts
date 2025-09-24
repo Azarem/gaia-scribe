@@ -220,7 +220,12 @@ export class BuildOrchestrator {
     // Combine blocks and parts
     const blocksWithParts = (blocks || []).map(block => ({
       ...block,
-      parts: parts?.filter(part => part.blockId === block.id) || []
+      parts: parts?.filter(part => part.blockId === block.id)?.sort((a, b) => {
+          const orderA = a.index ?? 0;
+          const orderB = b.index ?? 0;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.location - b.location;
+      }) ?? []
     }))
         
     return blocksWithParts
