@@ -97,7 +97,7 @@ export default function BlockArtifactModal({
               )}
             </div>
             
-            <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[90vh]">
+            <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[85vh]">
               <pre className="text-green-400 font-mono text-sm whitespace-pre-wrap">
                 {artifact.content}
               </pre>

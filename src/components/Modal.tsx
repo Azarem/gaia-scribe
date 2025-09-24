@@ -61,7 +61,7 @@ export default function Modal({
     >
       <div
         className={clsx(
-          'relative w-full max-w-md max-h-[95vh] bg-white rounded-lg shadow-xl overflow-hidden',
+          'relative w-full max-w-lg max-h-[95vh] bg-white rounded-lg shadow-xl overflow-hidden',
           className
         )}
         role="dialog"
