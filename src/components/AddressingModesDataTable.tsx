@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Check, X, Edit2, Trash2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Check, X, Edit2, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../stores/auth-store'
 import { usePlatformPermissions } from '../hooks/usePlatformPermissions'
 import { db, supabase } from '../lib/supabase'
@@ -9,7 +9,6 @@ import clsx from 'clsx'
 
 interface AddressingModesDataTableProps extends Omit<DataTableProps<AddressingModeWithInstructionCodes>, 'data' | 'columns'> {
   platformId: string
-  columns: ColumnDefinition<AddressingModeWithInstructionCodes>[]
 }
 
 interface AddressingModeWithInstructionCodes extends AddressingMode {
@@ -23,7 +22,6 @@ interface InstructionCodeWithGroup extends InstructionCode {
 
 export default function AddressingModesDataTable({
   platformId,
-  columns,
   ...props
 }: AddressingModesDataTableProps) {
   const { user } = useAuthStore()
@@ -32,6 +30,7 @@ export default function AddressingModesDataTable({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [instructionGroups, setInstructionGroups] = useState<InstructionGroup[]>([])
+  const [expandedModes, setExpandedModes] = useState<Set<string>>(new Set())
 
   // Instruction code management state
   const [addCodeFormData, setAddCodeFormData] = useState<{ [modeId: string]: Partial<InstructionCode> }>({})
@@ -39,6 +38,67 @@ export default function AddressingModesDataTable({
   const [editingCodeId, setEditingCodeId] = useState<string | null>(null)
   const [editCodeFormData, setEditCodeFormData] = useState<Partial<InstructionCode>>({})
   const [editCodeValidationErrors, setEditCodeValidationErrors] = useState<Record<string, string>>({})
+
+  // Column definitions
+  const columns: ColumnDefinition<AddressingModeWithInstructionCodes>[] = [
+    {
+      key: 'expand',
+      label: '',
+      width: '40',
+      render: () => null // Handled by enhanced columns
+    },
+    { key: 'name', label: 'Name', sortable: true, editable: true, type: 'text' },
+    { key: 'code', label: 'Code', sortable: true, editable: true, type: 'text' },
+    {
+      key: 'size',
+      label: 'Size',
+      sortable: true,
+      editable: true,
+      type: 'number',
+      render: (value: number) => `${value} bytes`
+    },
+    { key: 'format', label: 'Format', sortable: true, editable: true, type: 'text' },
+    { key: 'pattern', label: 'Pattern', sortable: true, editable: true, type: 'text' },
+  ]
+
+  // Toggle addressing mode expansion
+  const toggleModeExpansion = (modeId: string) => {
+    setExpandedModes(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(modeId)) {
+        newSet.delete(modeId)
+      } else {
+        newSet.add(modeId)
+      }
+      return newSet
+    })
+  }
+
+  // Enhanced columns with expand functionality
+  const enhancedColumns = useMemo(() => {
+    return columns.map(col => {
+      if (col.key === 'expand') {
+        return {
+          ...col,
+          render: (_value: any, row: AddressingModeWithInstructionCodes) => (
+            <button
+              onClick={() => toggleModeExpansion(row.id)}
+              className="p-1 hover:bg-gray-100 rounded"
+              title={expandedModes.has(row.id) ? 'Collapse' : 'Expand'}
+            >
+              {expandedModes.has(row.id) ? (
+                <ChevronDown className="h-4 w-4 text-gray-600" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-gray-600" />
+              )}
+            </button>
+          )
+        }
+      }
+
+      return col
+    })
+  }, [columns, expandedModes])
 
   // Load addressing modes for the platform
   const loadData = useCallback(async () => {
@@ -552,13 +612,17 @@ export default function AddressingModesDataTable({
     <DataTable
       {...props}
       data={data}
-      columns={columns}
+      columns={enhancedColumns}
       loading={loading}
       error={error}
       onAdd={canManage ? handleAdd : undefined}
       onEdit={canManage ? handleEdit : undefined}
       onDelete={canManage ? handleDelete : undefined}
       onRefresh={handleRefresh}
+      expandedRows={expandedModes}
+      searchPlaceholder="Search addressing modes..."
+      addButtonText="Add Addressing Mode"
+      emptyMessage="No addressing modes found. Click 'Add Addressing Mode' to create your first entry."
       renderExpandedContent={(addressingMode: AddressingModeWithInstructionCodes) => {
         const codes = addressingMode.instructionCodes ?? [];
 

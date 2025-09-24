@@ -23,23 +23,6 @@ function PlatformSectionContent({ sectionKey, sectionName, platform }: PlatformS
       return (
         <AddressingModesDataTable
           platformId={platform.id}
-          columns={[
-            { key: 'name', label: 'Name', sortable: true, editable: true, type: 'text' },
-            { key: 'code', label: 'Code', sortable: true, editable: true, type: 'text' },
-            {
-              key: 'size',
-              label: 'Size',
-              sortable: true,
-              editable: true,
-              type: 'number',
-              render: (value) => `${value} bytes`
-            },
-            { key: 'format', label: 'Format', sortable: true, editable: true, type: 'text' },
-            { key: 'pattern', label: 'Pattern', sortable: true, editable: true, type: 'text' },
-          ]}
-          searchPlaceholder="Search addressing modes..."
-          addButtonText="Add Addressing Mode"
-          emptyMessage="No addressing modes found. Click 'Add Addressing Mode' to create your first entry."
         />
       )
 
