@@ -56,12 +56,12 @@ export default function Modal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
       <div
         className={clsx(
-          'relative w-full max-w-md max-h-[90vh] bg-white rounded-lg shadow-xl overflow-hidden',
+          'relative w-full max-w-md max-h-[95vh] bg-white rounded-lg shadow-xl overflow-hidden',
           className
         )}
         role="dialog"
@@ -88,7 +88,7 @@ export default function Modal({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-theme(spacing.24))]">
+        <div className="overflow-y-auto max-h-[calc(95vh-theme(spacing.24))]">
           {children}
         </div>
       </div>

@@ -1067,7 +1067,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
       {/* Build Progress Display */}
       {isBuilding && buildProgress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Building Project</h3>
 
