@@ -268,14 +268,7 @@ export default function DataTable<T extends { id: string }>({
     const error = errors[column.key]
 
     const handleChange = (newValue: any) => {
-      // Handle array fields (convert comma-separated string to array)
       let processedValue = newValue
-      if (column.type === 'textarea' && typeof newValue === 'string') {
-        // Check if this field should be an array based on the render function
-        if (column.render && column.render.toString().includes('join')) {
-          processedValue = newValue.split(',').map((item: string) => item.trim()).filter(Boolean)
-        }
-      }
 
       // Handle HEX input (convert to number for storage)
       if (column.type === 'text' && typeof newValue === 'string' && column.render && column.render.toString().includes('toString(16)')) {
@@ -300,6 +293,19 @@ export default function DataTable<T extends { id: string }>({
       }
     }
 
+    const handleBlur = (newValue: any) => {
+      // Handle array fields (convert comma-separated string to array on blur)
+      let processedValue = newValue
+      if (column.type === 'textarea' && typeof newValue === 'string') {
+        // Check if this field should be an array based on the render function
+        if (column.render && column.render.toString().includes('join')) {
+          processedValue = newValue.split(',').map((item: string) => item.trim()).filter(Boolean)
+        }
+      }
+
+      setData({ ...data, [column.key]: processedValue })
+    }
+
     const baseClasses = clsx(
       'w-full px-2 py-1 text-sm border rounded',
       error 
@@ -314,6 +320,7 @@ export default function DataTable<T extends { id: string }>({
             <textarea
               value={value}
               onChange={(e) => handleChange(e.target.value)}
+              onBlur={(e) => handleBlur(e.target.value)}
               className={clsx(baseClasses, 'resize-none')}
               rows={2}
             />
