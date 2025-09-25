@@ -65,11 +65,15 @@ export default function BlockArtifactModal({
   if (!block) return null
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={handleClose} 
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
       title={`Block: ${block.name}`}
       className="max-w-4xl"
+      movable={true}
+      resizable={true}
+      transparentBackdrop={true}
+      initialSize={{ width: 800, height: 600 }}
     >
       <div className="p-6">
         {loading ? (
@@ -97,7 +101,7 @@ export default function BlockArtifactModal({
               )}
             </div>
             
-            <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[75vh]">
+            <div className="bg-gray-900 rounded-lg p-4">
               <pre className="text-green-400 font-mono text-sm whitespace-pre-wrap">
                 {artifact.content}
               </pre>
