@@ -50,6 +50,7 @@ export default function Modal({
   const [resizeHandle, setResizeHandle] = useState<string | null>(null)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [initialMousePos, setInitialMousePos] = useState({ x: 0, y: 0 })
+  const [resizeAnchor, setResizeAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 })
 
   // Refs
   const modalRef = useRef<HTMLDivElement>(null)
@@ -71,30 +72,45 @@ export default function Modal({
       const newY = Math.max(0, Math.min(window.innerHeight - size.height, dragStart.y + deltaY))
       setPosition({ x: newX, y: newY })
     } else if (isResizing && resizable && resizeHandle) {
-      const deltaX = e.clientX - initialMousePos.x
-      const deltaY = e.clientY - initialMousePos.y
+      // Calculate new dimensions based on mouse position relative to anchor point
+      const mouseX = e.clientX
+      const mouseY = e.clientY
 
-      let newWidth = size.width
-      let newHeight = size.height
-      let newX = position.x
-      let newY = position.y
+      let newWidth = resizeAnchor.width
+      let newHeight = resizeAnchor.height
+      let newX = resizeAnchor.x
+      let newY = resizeAnchor.y
 
-      // Handle different resize directions
-      if (resizeHandle.includes('e')) newWidth = Math.max(200, size.width + deltaX)
+      // Calculate new dimensions based on resize handle and anchor point
+      if (resizeHandle.includes('e')) {
+        // Right edge: anchor is left edge, width grows/shrinks based on mouse X
+        newWidth = Math.max(200, mouseX - resizeAnchor.x)
+      }
       if (resizeHandle.includes('w')) {
-        newWidth = Math.max(200, size.width - deltaX)
-        newX = position.x + (size.width - newWidth)
+        // Left edge: anchor is right edge, position and width change
+        const rightEdge = resizeAnchor.x + resizeAnchor.width
+        newX = Math.min(mouseX, rightEdge - 200) // Don't let it go past min width
+        newWidth = Math.max(200, rightEdge - newX)
       }
-      if (resizeHandle.includes('s')) newHeight = Math.max(150, size.height + deltaY)
+      if (resizeHandle.includes('s')) {
+        // Bottom edge: anchor is top edge, height grows/shrinks based on mouse Y
+        newHeight = Math.max(150, mouseY - resizeAnchor.y)
+      }
       if (resizeHandle.includes('n')) {
-        newHeight = Math.max(150, size.height - deltaY)
-        newY = position.y + (size.height - newHeight)
+        // Top edge: anchor is bottom edge, position and height change
+        const bottomEdge = resizeAnchor.y + resizeAnchor.height
+        newY = Math.min(mouseY, bottomEdge - 150) // Don't let it go past min height
+        newHeight = Math.max(150, bottomEdge - newY)
       }
+
+      // Ensure modal stays within viewport bounds
+      newX = Math.max(0, Math.min(window.innerWidth - newWidth, newX))
+      newY = Math.max(0, Math.min(window.innerHeight - newHeight, newY))
 
       setSize({ width: newWidth, height: newHeight })
       setPosition({ x: newX, y: newY })
     }
-  }, [isDragging, isResizing, movable, resizable, resizeHandle, initialMousePos, dragStart, size, position])
+  }, [isDragging, isResizing, movable, resizable, resizeHandle, initialMousePos, dragStart, size, position, resizeAnchor])
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
@@ -110,7 +126,35 @@ export default function Modal({
     setIsResizing(true)
     setResizeHandle(handle)
     setInitialMousePos({ x: e.clientX, y: e.clientY })
-  }, [resizable])
+
+    // Set anchor point based on resize handle - opposite corner/edge remains fixed
+    let anchorX = position.x
+    let anchorY = position.y
+
+    // For handles that include 'e' (east/right), anchor to the left edge
+    if (handle.includes('e')) {
+      anchorX = position.x // Left edge stays fixed
+    }
+    // For handles that include 'w' (west/left), anchor to the right edge
+    if (handle.includes('w')) {
+      anchorX = position.x + size.width // Right edge stays fixed
+    }
+    // For handles that include 's' (south/bottom), anchor to the top edge
+    if (handle.includes('s')) {
+      anchorY = position.y // Top edge stays fixed
+    }
+    // For handles that include 'n' (north/top), anchor to the bottom edge
+    if (handle.includes('n')) {
+      anchorY = position.y + size.height // Bottom edge stays fixed
+    }
+
+    setResizeAnchor({
+      x: anchorX,
+      y: anchorY,
+      width: size.width,
+      height: size.height
+    })
+  }, [resizable, position, size])
 
   // Handle escape key press
   useEffect(() => {
@@ -195,15 +239,17 @@ export default function Modal({
     <div
       className={clsx(
         'fixed inset-0 z-50',
-        transparentBackdrop ? '' : 'flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm'
+        transparentBackdrop ? 'pointer-events-none' : 'flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm'
       )}
       onClick={handleBackdropClick}
+      style={transparentBackdrop ? { pointerEvents: 'none' } : undefined}
     >
       <div
         ref={modalRef}
         className={clsx(
           'relative bg-white rounded-lg shadow-xl overflow-hidden',
           movable || resizable ? 'absolute' : 'w-full max-w-lg max-h-[95vh]',
+          transparentBackdrop ? 'pointer-events-auto' : '',
           className
         )}
         style={
@@ -214,8 +260,9 @@ export default function Modal({
                 width: size.width,
                 height: size.height,
                 maxHeight: '95vh',
+                ...(transparentBackdrop ? { pointerEvents: 'auto' } : {})
               }
-            : undefined
+            : transparentBackdrop ? { pointerEvents: 'auto' } : undefined
         }
         role="dialog"
         aria-modal="true"
