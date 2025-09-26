@@ -39,7 +39,7 @@ import ArtifactViewerPanel from './components/ArtifactViewerPanel'
 
 function App() {
   const { user } = useAuthStore()
-  const { isOpen, width } = useArtifactViewerStore()
+  //const { isOpen, width } = useArtifactViewerStore()
 
   // Auth state management is handled in auth-store.ts
   // No need to duplicate it here
@@ -49,9 +49,9 @@ function App() {
       {/* Main Content Area */}
       <div
         className="flex-1 transition-all duration-300 ease-in-out overflow-hidden"
-        style={{
-          marginRight: isOpen ? `${width}px` : '0px'
-        }}
+        // style={{
+        //   marginRight: isOpen ? `${width}px` : '0px'
+        // }}
       >
         <Routes>
           <Route
