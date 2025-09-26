@@ -94,56 +94,45 @@ export default function ArtifactViewerPanel() {
     document.addEventListener('mouseup', handleMouseUp)
   }, [width, setWidth])
 
-  // Don't render if not open
-  if (!isOpen) return null
-
   return (
-    <>
-      {/* Backdrop for mobile/small screens */}
-      <div 
-        className={clsx(
-          'fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300',
-          'lg:hidden', // Only show on smaller screens
-          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        )}
-        onClick={closePanel}
-      />
-
-      {/* Main Panel */}
-      <div
-        ref={panelRef}
-        className={clsx(
-          'fixed top-0 right-0 h-full bg-white shadow-2xl z-50',
-          'transform transition-transform duration-300 ease-in-out',
-          'border-l border-gray-200',
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        )}
-        style={{ width: `${width}px` }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="artifact-viewer-title"
-      >
-        {/* Resize Handle */}
-        <div
-          ref={resizeHandleRef}
-          className={clsx(
-            'absolute left-0 top-0 w-1 h-full cursor-col-resize',
-            'hover:bg-blue-500 transition-colors duration-200',
-            'group flex items-center justify-center',
-            isResizing ? 'bg-blue-500' : 'bg-transparent hover:bg-blue-500/20'
-          )}
-          onMouseDown={handleMouseDown}
-          title="Drag to resize panel"
-        >
-          <div className={clsx(
-            'w-1 h-8 bg-gray-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity',
-            isResizing ? 'opacity-100 bg-blue-500' : ''
-          )} />
-          <GripVertical className={clsx(
-            'absolute w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity',
-            isResizing ? 'opacity-100 text-blue-500' : ''
-          )} />
-        </div>
+    <div
+      ref={panelRef}
+      className={clsx(
+        'h-screen bg-white shadow-2xl border-l border-gray-200',
+        'transition-all duration-300 ease-in-out flex-shrink-0 relative',
+        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      )}
+      style={{
+        width: isOpen ? `${width}px` : '0px',
+        overflow: isOpen ? 'visible' : 'hidden'
+      }}
+      role="complementary"
+      aria-labelledby="artifact-viewer-title"
+      aria-hidden={!isOpen}
+    >
+      {isOpen && (
+        <>
+          {/* Resize Handle */}
+          <div
+            ref={resizeHandleRef}
+            className={clsx(
+              'absolute left-0 top-0 w-1 h-full cursor-col-resize z-10',
+              'hover:bg-blue-500 transition-colors duration-200',
+              'group flex items-center justify-center',
+              isResizing ? 'bg-blue-500' : 'bg-transparent hover:bg-blue-500/20'
+            )}
+            onMouseDown={handleMouseDown}
+            title="Drag to resize panel"
+          >
+            <div className={clsx(
+              'w-1 h-8 bg-gray-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity',
+              isResizing ? 'opacity-100 bg-blue-500' : ''
+            )} />
+            <GripVertical className={clsx(
+              'absolute w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity',
+              isResizing ? 'opacity-100 text-blue-500' : ''
+            )} />
+          </div>
 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
@@ -242,7 +231,8 @@ export default function ArtifactViewerPanel() {
             </div>
           )}
         </div>
-      </div>
-    </>
+        </>
+      )}
+    </div>
   )
 }

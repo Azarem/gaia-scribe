@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth-store'
+import { useArtifactViewerStore } from './stores/artifact-viewer-store'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
@@ -38,66 +39,75 @@ import ArtifactViewerPanel from './components/ArtifactViewerPanel'
 
 function App() {
   const { user } = useAuthStore()
+  const { isOpen, width } = useArtifactViewerStore()
 
   // Auth state management is handled in auth-store.ts
   // No need to duplicate it here
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Routes>
-        <Route
-          path="/login"
-          element={user ? <Navigate to="/dashboard" /> : <LoginPage />}
-        />
-        <Route
-          path="/auth/callback"
-          element={<AuthCallback />}
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/projects/:id"
-          element={<ProjectDetailPage />}
-        />
-        <Route
-          path="/project/:id/:section"
-          element={
-            <ProtectedRoute>
-              <ProjectSectionPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/platforms"
-          element={
-            <ProtectedRoute>
-              <PlatformPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/platforms/:id"
-          element={<PlatformDetailPage />}
-        />
-        <Route
-          path="/platforms/:id/:section"
-          element={
-            <ProtectedRoute>
-              <PlatformSectionPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/"
-          element={<Navigate to={user ? "/dashboard" : "/login"} />}
-        />
-      </Routes>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Main Content Area */}
+      <div
+        className="flex-1 transition-all duration-300 ease-in-out overflow-hidden"
+        style={{
+          marginRight: isOpen ? `${width}px` : '0px'
+        }}
+      >
+        <Routes>
+          <Route
+            path="/login"
+            element={user ? <Navigate to="/dashboard" /> : <LoginPage />}
+          />
+          <Route
+            path="/auth/callback"
+            element={<AuthCallback />}
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:id"
+            element={<ProjectDetailPage />}
+          />
+          <Route
+            path="/project/:id/:section"
+            element={
+              <ProtectedRoute>
+                <ProjectSectionPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/platforms"
+            element={
+              <ProtectedRoute>
+                <PlatformPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/platforms/:id"
+            element={<PlatformDetailPage />}
+          />
+          <Route
+            path="/platforms/:id/:section"
+            element={
+              <ProtectedRoute>
+                <PlatformSectionPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={<Navigate to={user ? "/dashboard" : "/login"} />}
+          />
+        </Routes>
+      </div>
 
       {/* Global Artifact Viewer Panel */}
       <ArtifactViewerPanel />
