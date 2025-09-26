@@ -3,7 +3,6 @@ import { X, Code, AlertCircle, Loader, GripVertical } from 'lucide-react'
 import clsx from 'clsx'
 import { useArtifactViewerStore } from '../stores/artifact-viewer-store'
 import { db } from '../lib/supabase'
-import type { BlockArtifact } from '@prisma/client'
 
 export default function ArtifactViewerPanel() {
   const {
@@ -11,8 +10,8 @@ export default function ArtifactViewerPanel() {
     isLoading,
     error,
     width,
-    minWidth,
-    maxWidth,
+    //minWidth,
+    //maxWidth,
     selectedBlock,
     artifact,
     closePanel,
