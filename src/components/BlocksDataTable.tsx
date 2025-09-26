@@ -2,11 +2,11 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Check, X, Edit2, Trash2, Hammer, Eye } from 'lucide-react'
 import DataTable, { type DataTableProps } from './DataTable'
 import { useAuthStore } from '../stores/auth-store'
+import { useArtifactViewerStore } from '../stores/artifact-viewer-store'
 import { db } from '../lib/supabase'
 import type { Block, BlockPart, ScribeProject } from '@prisma/client'
 import clsx from 'clsx'
 import RomPathModal from './RomPathModal'
-import BlockArtifactModal from './BlockArtifactModal'
 import NotificationModal from './NotificationModal'
 import { createBuildOrchestrator, type BuildProgressCallback } from '../lib/build-orchestrator'
 
@@ -25,6 +25,7 @@ interface BlocksDataTableProps extends Omit<DataTableProps<BlockWithAddresses>, 
 
 export default function BlocksDataTable({ data, projectId, project, onBuildComplete, columns, ...props }: BlocksDataTableProps) {
   const { user } = useAuthStore()
+  const { openPanel } = useArtifactViewerStore()
   const [currentBank, setCurrentBank] = useState<number>(0)
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set())
   const [blockParts, setBlockParts] = useState<{ [blockId: string]: BlockPart[] }>({})
@@ -41,10 +42,6 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
   const [showRomPathModal, setShowRomPathModal] = useState(false)
   const [isBuilding, setIsBuilding] = useState(false)
   const [buildProgress, setBuildProgress] = useState<{ step: string; progress: number; total: number } | null>(null)
-
-  // Artifact viewing state
-  const [showArtifactModal, setShowArtifactModal] = useState(false)
-  const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
 
   // Notification state
   const [notification, setNotification] = useState<{
@@ -740,10 +737,9 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
   // Artifact viewing functionality
   const handleViewArtifact = useCallback((block: Block) => {
     try {
-      setSelectedBlock(block)
-      setShowArtifactModal(true)
+      openPanel(block)
     } catch (error) {
-      console.error('Error opening artifact modal:', error)
+      console.error('Error opening artifact panel:', error)
       showNotification(
         'error',
         'Error Opening Artifact',
@@ -751,12 +747,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
         [error instanceof Error ? error.message : 'Unknown error']
       )
     }
-  }, [showNotification])
-
-  const handleCloseArtifactModal = () => {
-    setShowArtifactModal(false)
-    setSelectedBlock(null)
-  }
+  }, [openPanel, showNotification])
 
   // Enhanced columns with expand functionality
   const enhancedColumns = useMemo(() => {
@@ -1049,13 +1040,6 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
         onConfirm={handleRomFileConfirm}
         title="Build Project"
         description="To build the project and generate assembly code, please select your ROM file."
-      />
-
-      {/* Block Artifact Modal */}
-      <BlockArtifactModal
-        isOpen={showArtifactModal}
-        onClose={handleCloseArtifactModal}
-        block={selectedBlock}
       />
 
       {/* Notification Modal */}

@@ -9,6 +9,7 @@ import PlatformDetailPage from './pages/PlatformDetailPage'
 import PlatformSectionPage from './pages/PlatformSectionPage'
 import AuthCallback from './pages/AuthCallback'
 import ProtectedRoute from './components/ProtectedRoute'
+import ArtifactViewerPanel from './components/ArtifactViewerPanel'
 
 // Handle GitHub Pages SPA redirect (rafgraph/spa-github-pages solution)
 // CRITICAL: This must run immediately at module level, before React routing
@@ -44,13 +45,13 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Routes>
-        <Route 
-          path="/login" 
-          element={user ? <Navigate to="/dashboard" /> : <LoginPage />} 
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/dashboard" /> : <LoginPage />}
         />
-        <Route 
-          path="/auth/callback" 
-          element={<AuthCallback />} 
+        <Route
+          path="/auth/callback"
+          element={<AuthCallback />}
         />
         <Route
           path="/dashboard"
@@ -97,6 +98,9 @@ function App() {
           element={<Navigate to={user ? "/dashboard" : "/login"} />}
         />
       </Routes>
+
+      {/* Global Artifact Viewer Panel */}
+      <ArtifactViewerPanel />
     </div>
   )
 }
