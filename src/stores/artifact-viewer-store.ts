@@ -6,24 +6,28 @@ export interface ArtifactViewerState {
   isOpen: boolean
   isLoading: boolean
   error: string | null
-  
+
   // Panel dimensions and position
   width: number
+  temporaryWidth: number | null // Used during dragging for visual feedback
   minWidth: number
   maxWidth: number
-  
+
   // Content state
   selectedBlock: Block | null
   artifact: BlockArtifact | null
-  
+
   // Actions
   openPanel: (block: Block) => void
   closePanel: () => void
   setWidth: (width: number) => void
+  setTemporaryWidth: (width: number) => void
+  setFinalWidth: (width: number) => void
+  clearTemporaryWidth: () => void
   setArtifact: (artifact: BlockArtifact | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
-  
+
   // Local storage persistence
   loadFromStorage: () => void
   saveToStorage: () => void
@@ -42,12 +46,13 @@ export const useArtifactViewerStore = create<ArtifactViewerState>((set, get) => 
   isOpen: false,
   isLoading: false,
   error: null,
-  
+
   // Panel dimensions
   width: DEFAULT_WIDTH,
+  temporaryWidth: null,
   minWidth: MIN_WIDTH,
   maxWidth: Math.floor(window.innerWidth * MAX_WIDTH_PERCENTAGE),
-  
+
   // Content
   selectedBlock: null,
   artifact: null,
@@ -80,11 +85,39 @@ export const useArtifactViewerStore = create<ArtifactViewerState>((set, get) => 
       Math.min(width, state.maxWidth)
     )
     set({ width: constrainedWidth })
-    
+
     // Save to localStorage
     get().saveToStorage()
   },
-  
+
+  setTemporaryWidth: (width: number) => {
+    const state = get()
+    const constrainedWidth = Math.max(
+      state.minWidth,
+      Math.min(width, state.maxWidth)
+    )
+    set({ temporaryWidth: constrainedWidth })
+  },
+
+  setFinalWidth: (width: number) => {
+    const state = get()
+    const constrainedWidth = Math.max(
+      state.minWidth,
+      Math.min(width, state.maxWidth)
+    )
+    set({
+      width: constrainedWidth,
+      temporaryWidth: null
+    })
+
+    // Save to localStorage only on final width change
+    get().saveToStorage()
+  },
+
+  clearTemporaryWidth: () => {
+    set({ temporaryWidth: null })
+  },
+
   setArtifact: (artifact: BlockArtifact | null) => {
     set({ artifact, isLoading: false })
   },

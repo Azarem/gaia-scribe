@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth-store'
+import { useArtifactViewerStore } from './stores/artifact-viewer-store'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
@@ -38,19 +39,19 @@ import ArtifactViewerPanel from './components/ArtifactViewerPanel'
 
 function App() {
   const { user } = useAuthStore()
-  //const { isOpen, width } = useArtifactViewerStore()
+  const { isOpen, width, temporaryWidth } = useArtifactViewerStore()
 
   // Auth state management is handled in auth-store.ts
   // No need to duplicate it here
+
+  // Calculate the current display width for the push-aside layout
+  const displayWidth = temporaryWidth !== null ? temporaryWidth : width
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Main Content Area */}
       <div
         className="flex-1 transition-all duration-300 ease-in-out overflow-hidden"
-        // style={{
-        //   marginRight: isOpen ? `${width}px` : '0px'
-        // }}
       >
         <Routes>
           <Route

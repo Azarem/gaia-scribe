@@ -10,12 +10,15 @@ export default function ArtifactViewerPanel() {
     isLoading,
     error,
     width,
-    //minWidth,
-    //maxWidth,
+    temporaryWidth,
+    minWidth,
+    maxWidth,
     selectedBlock,
     artifact,
     closePanel,
-    setWidth,
+    setTemporaryWidth,
+    setFinalWidth,
+    clearTemporaryWidth,
     setArtifact,
     setLoading,
     setError
@@ -24,6 +27,7 @@ export default function ArtifactViewerPanel() {
   const panelRef = useRef<HTMLDivElement>(null)
   const resizeHandleRef = useRef<HTMLDivElement>(null)
   const [isResizing, setIsResizing] = useState(false)
+  const [dragIndicatorPosition, setDragIndicatorPosition] = useState<number | null>(null)
 
   // Load artifact when block is selected
   useEffect(() => {
@@ -70,7 +74,7 @@ export default function ArtifactViewerPanel() {
     }
   }, [isOpen, closePanel])
 
-  // Resize functionality
+  // Resize functionality with optimized performance
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
     event.preventDefault()
     setIsResizing(true)
@@ -81,35 +85,71 @@ export default function ArtifactViewerPanel() {
     const handleMouseMove = (e: MouseEvent) => {
       const deltaX = startX - e.clientX // Inverted because we're resizing from the left
       const newWidth = startWidth + deltaX
-      setWidth(newWidth)
+
+      // Constrain the width within bounds for visual feedback
+      const constrainedWidth = Math.max(
+        minWidth,
+        Math.min(newWidth, maxWidth)
+      )
+
+      // Use temporary width for smooth visual feedback without localStorage writes
+      setTemporaryWidth(constrainedWidth)
+      setDragIndicatorPosition(constrainedWidth)
     }
 
     const handleMouseUp = () => {
       setIsResizing(false)
+      setDragIndicatorPosition(null)
+
+      // Calculate final width
+      const deltaX = startX - event.clientX
+      const finalWidth = startWidth + deltaX
+
+      // Set final width (this will save to localStorage)
+      setFinalWidth(finalWidth)
+      clearTemporaryWidth()
+
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }, [width, setWidth])
+  }, [width, minWidth, maxWidth, setTemporaryWidth, setFinalWidth, clearTemporaryWidth])
+
+  // Calculate the current display width (use temporary width during dragging)
+  const displayWidth = temporaryWidth !== null ? temporaryWidth : width
 
   return (
-    <div
-      ref={panelRef}
-      className={clsx(
-        'h-screen bg-white shadow-2xl border-l border-gray-200',
-        'transition-all duration-300 ease-in-out flex-shrink-0 relative',
-        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+    <>
+      {/* Visual drag indicator */}
+      {isResizing && dragIndicatorPosition !== null && (
+        <div
+          className="fixed top-0 bottom-0 w-0.5 bg-blue-500 z-50 pointer-events-none"
+          style={{
+            right: `${dragIndicatorPosition}px`,
+            opacity: 0.8
+          }}
+        />
       )}
-      style={{
-        width: isOpen ? `${width}px` : '0px',
-        overflow: isOpen ? 'visible' : 'hidden'
-      }}
-      role="complementary"
-      aria-labelledby="artifact-viewer-title"
-      aria-hidden={!isOpen}
-    >
+
+      <div
+        ref={panelRef}
+        className={clsx(
+          'h-screen bg-white shadow-2xl border-l border-gray-200',
+          'flex-shrink-0 relative',
+          // Only apply transition when not resizing for smooth performance
+          !isResizing && 'transition-all duration-300 ease-in-out',
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        )}
+        style={{
+          width: isOpen ? `${displayWidth}px` : '0px',
+          overflow: isOpen ? 'auto' : 'hidden'
+        }}
+        role="complementary"
+        aria-labelledby="artifact-viewer-title"
+        aria-hidden={!isOpen}
+      >
       {isOpen && (
         <>
           {/* Resize Handle */}
@@ -234,5 +274,6 @@ export default function ArtifactViewerPanel() {
         </>
       )}
     </div>
+    </>
   )
 }
