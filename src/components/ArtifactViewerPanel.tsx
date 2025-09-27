@@ -10,15 +10,12 @@ export default function ArtifactViewerPanel() {
     isLoading,
     error,
     width,
-    temporaryWidth,
     minWidth,
     maxWidth,
     selectedBlock,
     artifact,
     closePanel,
-    setTemporaryWidth,
     setFinalWidth,
-    clearTemporaryWidth,
     setArtifact,
     setLoading,
     setError
@@ -74,40 +71,40 @@ export default function ArtifactViewerPanel() {
     }
   }, [isOpen, closePanel])
 
-  // Resize functionality with optimized performance
+  // Simple resize functionality
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
     event.preventDefault()
+
+    // On mouse down: show the vertical indicator
     setIsResizing(true)
+    setDragIndicatorPosition(width)
 
     const startX = event.clientX
     const startWidth = width
 
     const handleMouseMove = (e: MouseEvent) => {
+      // On mouse move: move the vertical indicator
       const deltaX = startX - e.clientX // Inverted because we're resizing from the left
       const newWidth = startWidth + deltaX
 
-      // Constrain the width within bounds for visual feedback
+      // Constrain the width within bounds
       const constrainedWidth = Math.max(
         minWidth,
         Math.min(newWidth, maxWidth)
       )
 
-      // Use temporary width for smooth visual feedback without localStorage writes
-      setTemporaryWidth(constrainedWidth)
       setDragIndicatorPosition(constrainedWidth)
     }
 
     const handleMouseUp = () => {
+      // On mouse up: hide the vertical indicator and resize the panel
       setIsResizing(false)
       setDragIndicatorPosition(null)
 
-      // Calculate final width
+      // Calculate final width and apply it
       const deltaX = startX - event.clientX
       const finalWidth = startWidth + deltaX
-
-      // Set final width (this will save to localStorage)
       setFinalWidth(finalWidth)
-      clearTemporaryWidth()
 
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
@@ -115,10 +112,7 @@ export default function ArtifactViewerPanel() {
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }, [width, minWidth, maxWidth, setTemporaryWidth, setFinalWidth, clearTemporaryWidth])
-
-  // Calculate the current display width (use temporary width during dragging)
-  const displayWidth = temporaryWidth !== null ? temporaryWidth : width
+  }, [width, minWidth, maxWidth, setFinalWidth])
 
   return (
     <>
@@ -143,7 +137,7 @@ export default function ArtifactViewerPanel() {
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
         style={{
-          width: isOpen ? `${displayWidth}px` : '0px',
+          width: isOpen ? `${width}px` : '0px',
           overflow: isOpen ? 'auto' : 'hidden'
         }}
         role="complementary"
