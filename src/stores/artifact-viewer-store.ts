@@ -85,9 +85,6 @@ export const useArtifactViewerStore = create<ArtifactViewerState>((set, get) => 
       Math.min(width, state.maxWidth)
     )
     set({ width: constrainedWidth })
-
-    // Save to localStorage
-    get().saveToStorage()
   },
 
   setTemporaryWidth: (width: number) => {
@@ -105,11 +102,7 @@ export const useArtifactViewerStore = create<ArtifactViewerState>((set, get) => 
       state.minWidth,
       Math.min(width, state.maxWidth)
     )
-    set({
-      width: constrainedWidth,
-      temporaryWidth: null
-    })
-
+    set({ width: constrainedWidth })
     // Save to localStorage only on final width change
     get().saveToStorage()
   },
