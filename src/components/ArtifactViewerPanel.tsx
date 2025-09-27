@@ -132,8 +132,6 @@ export default function ArtifactViewerPanel() {
         className={clsx(
           'h-screen bg-white shadow-2xl border-l border-gray-200',
           'flex-shrink-0 relative',
-          // Only apply transition when not resizing for smooth performance
-          !isResizing && 'transition-all duration-300 ease-in-out',
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
         style={{
