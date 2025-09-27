@@ -96,13 +96,13 @@ export default function ArtifactViewerPanel() {
       setDragIndicatorPosition(constrainedWidth)
     }
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       // On mouse up: hide the vertical indicator and resize the panel
       setIsResizing(false)
       setDragIndicatorPosition(null)
 
       // Calculate final width and apply it
-      const deltaX = startX - event.clientX
+      const deltaX = startX - e.clientX
       const finalWidth = startWidth + deltaX
       setFinalWidth(finalWidth)
 
