@@ -206,7 +206,7 @@ const setupAuthListener = () => {
         const SYNC_COOLDOWN = 30000 // 30 seconds cooldown between syncs
 
         // Check if this is the initial session restoration
-        if (!hasInitialSession) {
+        if (hasInitialSession) {
           console.log('Initial session detected, marking as processed (no sync needed)')
           setHasInitialSession(true)
           return
