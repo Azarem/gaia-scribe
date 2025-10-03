@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth-store'
 import { db } from '../lib/supabase'
@@ -7,9 +7,20 @@ export default function AuthCallback() {
   const navigate = useNavigate()
   const [isProcessing, setIsProcessing] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { user, session } = useAuthStore()
+
+  // Track if we've already handled the callback to prevent multiple executions
+  const hasHandledCallback = useRef(false)
+  const isNavigating = useRef(false)
+  const timeoutIdRef = useRef<number | null>(null)
 
   useEffect(() => {
+    // Prevent multiple executions
+    if (hasHandledCallback.current || isNavigating.current) {
+      return
+    }
+
+    hasHandledCallback.current = true
+
     const handleAuthCallback = async () => {
       try {
         console.log('=== AuthCallback: Starting OAuth callback processing ===')
@@ -24,6 +35,7 @@ export default function AuthCallback() {
         if (errorParam) {
           console.error('OAuth error:', errorParam, errorDescription)
           setError(`Authentication failed: ${errorDescription || errorParam}`)
+          isNavigating.current = true
           setTimeout(() => navigate('/login?error=oauth_failed'), 2000)
           return
         }
@@ -36,12 +48,22 @@ export default function AuthCallback() {
         const maxAttempts = 20 // 10 seconds total
 
         const checkAuthState = async () => {
+          // Stop if we're already navigating
+          if (isNavigating.current) {
+            return
+          }
+
           attempts++
           console.log(`AuthCallback: Checking auth state (attempt ${attempts})`)
 
-          if (session && user) {
+          const currentSession = useAuthStore.getState().session
+          const currentUser = useAuthStore.getState().user
+
+          if (currentSession && currentUser) {
             console.log('AuthCallback: Authentication successful, syncing user')
-            const { data, error } = await db.users.syncFromAuth(session.user)
+            isNavigating.current = true
+
+            const { data, error } = await db.users.syncFromAuth(currentSession.user)
 
             if (error) {
               console.error('AuthCallback: Error syncing user:', error)
@@ -55,11 +77,12 @@ export default function AuthCallback() {
           if (attempts >= maxAttempts) {
             console.error('AuthCallback: Timeout waiting for authentication')
             setError('Authentication timeout - please try again')
+            isNavigating.current = true
             setTimeout(() => navigate('/login?error=auth_timeout'), 2000)
             return
           }
 
-          setTimeout(checkAuthState, 500)
+          timeoutIdRef.current = window.setTimeout(checkAuthState, 500)
         }
 
         // Start checking immediately
@@ -68,6 +91,7 @@ export default function AuthCallback() {
       } catch (error) {
         console.error('Auth callback error:', error)
         setError('Authentication failed - please try again')
+        isNavigating.current = true
         setTimeout(() => navigate('/login?error=auth_callback_failed'), 2000)
       } finally {
         setIsProcessing(false)
@@ -75,7 +99,15 @@ export default function AuthCallback() {
     }
 
     handleAuthCallback()
-  }, [navigate, session, user])
+
+    // Cleanup function to cancel pending timeouts
+    return () => {
+      if (timeoutIdRef.current !== null) {
+        clearTimeout(timeoutIdRef.current)
+        timeoutIdRef.current = null
+      }
+    }
+  }, [navigate]) // Only depend on navigate, not session/user
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
