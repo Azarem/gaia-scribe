@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth-store'
+import { db } from '../lib/supabase'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
@@ -40,12 +41,19 @@ export default function AuthCallback() {
           let attempts = 0
           const maxAttempts = 10 // 5 seconds total
 
-          const checkAuthState = () => {
+          const checkAuthState = async () => {
             attempts++
             console.log(`AuthCallback: Checking auth state (attempt ${attempts})`)
 
             if (session && user) {
-              console.log('AuthCallback: Authentication successful, redirecting to dashboard')
+              console.log('AuthCallback: Authentication successful, syncing user')
+              const { data, error } = await db.users.syncFromAuth(session.user)
+              
+              if (error) {
+                console.error('AuthCallback: Error syncing user to database:', error)
+              } else {
+                console.log('AuthCallback: User synced to database successfully:', data)
+              }
               navigate('/dashboard')
               return
             }

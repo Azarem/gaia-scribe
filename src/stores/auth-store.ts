@@ -202,33 +202,33 @@ const setupAuthListener = () => {
 
       // Handle SIGNED_IN events with smart logic to prevent unnecessary syncs
       if (event === 'SIGNED_IN' && session?.user) {
-        const now = Date.now()
-        const SYNC_COOLDOWN = 30000 // 30 seconds cooldown between syncs
+        // const now = Date.now()
+        // const SYNC_COOLDOWN = 30000 // 30 seconds cooldown between syncs
 
-        // Check if this is the initial session restoration
-        if (hasInitialSession) {
-          console.log('Initial session detected, marking as processed (no sync needed)')
-          setHasInitialSession(true)
-          return
-        }
+        // // Check if this is the initial session restoration
+        // if (!hasInitialSession) {
+        //   console.log('Initial session detected, marking as processed (no sync needed)')
+        //   setHasInitialSession(true)
+        //   return
+        // }
 
-        // Check if we've synced recently (debouncing)
-        if (lastSyncTime && (now - lastSyncTime) < SYNC_COOLDOWN) {
-          console.log('User sync skipped - too recent (within cooldown period)')
-          return
-        }
+        // // Check if we've synced recently (debouncing)
+        // if (lastSyncTime && (now - lastSyncTime) < SYNC_COOLDOWN) {
+        //   console.log('User sync skipped - too recent (within cooldown period)')
+        //   return
+        // }
 
-        console.log('User signed in, syncing to database...')
-        const { data, error } = await db.users.syncFromAuth(session.user)
+        // console.log('User signed in, syncing to database...')
+        // const { data, error } = await db.users.syncFromAuth(session.user)
 
-        if (error) {
-          console.error('Error syncing user to database:', error)
-          setSyncError(error.message)
-        } else {
-          console.log('User synced to database successfully:', data)
-          setSyncError(null)
-          setLastSyncTime(now)
-        }
+        // if (error) {
+        //   console.error('Error syncing user to database:', error)
+        //   setSyncError(error.message)
+        // } else {
+        //   console.log('User synced to database successfully:', data)
+        //   setSyncError(null)
+        //   setLastSyncTime(now)
+        // }
       }
 
       if (event === 'SIGNED_OUT') {
