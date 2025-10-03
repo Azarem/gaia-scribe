@@ -175,9 +175,9 @@ const setupAuthListener = () => {
         setLoading,
         initialized,
         setInitialized,
-        hasInitialSession,
+        //hasInitialSession,
         setHasInitialSession,
-        lastSyncTime,
+        //lastSyncTime,
         setLastSyncTime,
         setSyncError,
         isAnonymousMode
