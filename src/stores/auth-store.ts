@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { supabase, db, clearWorkingClientCache } from '../lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
+import {
+  isAnonymousModeEnabled,
+  createAnonymousUser,
+  createAnonymousSession,
+  validateEnvironment,
+  //isAnonymousUser
+} from '../lib/environment'
 
 interface AuthState {
   user: User | null
@@ -10,6 +17,7 @@ interface AuthState {
   syncError: string | null
   lastSyncTime: number | null
   hasInitialSession: boolean
+  isAnonymousMode: boolean
   setUser: (user: User | null) => void
   setSession: (session: Session | null) => void
   setLoading: (loading: boolean) => void
@@ -17,7 +25,9 @@ interface AuthState {
   setSyncError: (error: string | null) => void
   setLastSyncTime: (time: number | null) => void
   setHasInitialSession: (hasInitial: boolean) => void
+  setAnonymousMode: (isAnonymous: boolean) => void
   retryUserSync: () => Promise<void>
+  initializeAnonymousMode: () => void
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -28,6 +38,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   syncError: null,
   lastSyncTime: null,
   hasInitialSession: false,
+  isAnonymousMode: false,
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session, user: session?.user ?? null }),
   setLoading: (loading) => set({ loading }),
@@ -35,8 +46,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setSyncError: (error) => set({ syncError: error }),
   setLastSyncTime: (time) => set({ lastSyncTime: time }),
   setHasInitialSession: (hasInitial) => set({ hasInitialSession: hasInitial }),
+  setAnonymousMode: (isAnonymous) => set({ isAnonymousMode: isAnonymous }),
   retryUserSync: async () => {
-    const { session } = get()
+    const { session, isAnonymousMode } = get()
+
+    // Skip user sync in anonymous mode
+    if (isAnonymousMode) {
+      console.log('Skipping user sync in anonymous mode')
+      return
+    }
+
     if (session?.user) {
       console.log('Retrying user sync...')
       const { data, error } = await db.users.syncFromAuth(session.user)
@@ -50,11 +69,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     }
   },
+  initializeAnonymousMode: () => {
+    console.log('Initializing anonymous mode...')
+    const anonymousUser = createAnonymousUser()
+    const anonymousSession = createAnonymousSession()
+
+    set({
+      user: anonymousUser,
+      session: anonymousSession as Session,
+      loading: false,
+      initialized: true,
+      isAnonymousMode: true,
+      hasInitialSession: true,
+      syncError: null
+    })
+
+    console.log('Anonymous mode initialized with user:', anonymousUser.email)
+  },
 }))
 
 // FIXED: Initialize auth with corruption detection and recovery
 // Based on: https://github.com/supabase/auth-js/issues/768
 const initializeAuth = async () => {
+  // Validate environment and check for anonymous mode
+  validateEnvironment()
+
+  // If anonymous mode is enabled, initialize with anonymous user
+  if (isAnonymousModeEnabled()) {
+    console.log('Anonymous mode enabled - initializing with anonymous user')
+    const { initializeAnonymousMode } = useAuthStore.getState()
+    initializeAnonymousMode()
+    return
+  }
+
   console.log('Initializing auth - checking for browser context corruption...')
 
   // Check if this is a page refresh with potential corruption
@@ -106,6 +153,12 @@ const initializeAuth = async () => {
 let authSubscription: any = null
 
 const setupAuthListener = () => {
+  // Skip auth listener setup in anonymous mode
+  if (isAnonymousModeEnabled()) {
+    console.log('Skipping auth listener setup in anonymous mode')
+    return
+  }
+
   // Clean up existing subscription if any
   if (authSubscription) {
     authSubscription.unsubscribe()
@@ -126,8 +179,15 @@ const setupAuthListener = () => {
         setHasInitialSession,
         lastSyncTime,
         setLastSyncTime,
-        setSyncError
+        setSyncError,
+        isAnonymousMode
       } = useAuthStore.getState()
+
+      // Skip processing in anonymous mode
+      if (isAnonymousMode) {
+        console.log('Skipping auth state change processing in anonymous mode')
+        return
+      }
 
       // Update session in store
       setSession(session)

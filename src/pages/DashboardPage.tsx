@@ -16,7 +16,7 @@ type ProjectWithCreator = ScribeProject
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { user, session, loading: authLoading, initialized } = useAuthStore()
+  const { user, session, loading: authLoading, initialized, isAnonymousMode } = useAuthStore()
   const [projects, setProjects] = useState<ProjectWithCreator[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateProject, setShowCreateProject] = useState(false)
@@ -84,6 +84,12 @@ export default function DashboardPage() {
     }
 
     loadProjects()
+
+    // Skip realtime subscriptions in anonymous mode
+    if (isAnonymousMode) {
+      console.log('Skipping project realtime subscriptions in anonymous mode')
+      return
+    }
 
     // Set up realtime subscriptions for project changes
     const setupRealtimeSubscription = async () => {
@@ -169,7 +175,7 @@ export default function DashboardPage() {
         supabase.removeChannel(channelRef)
       }
     }
-    }, [user, session, initialized, authLoading])
+    }, [user, session, initialized, authLoading, isAnonymousMode])
 
   const handleSignOut = async () => {
     await signOut()

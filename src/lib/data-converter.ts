@@ -146,7 +146,8 @@ export function convertExternalToInternal(
     hasFiles: !!gameRomBranch.files,
     hasCoplib: !!gameRomBranch.coplib,
     hasFixups: !!gameRomBranch.fixups,
-    hasTypes: !!gameRomBranch.types
+    hasStrings: !!gameRomBranch.strings,
+    hasStructs: !!gameRomBranch.structs
   })
 
   // Debug: Log the actual blocks data if it exists
@@ -163,8 +164,8 @@ export function convertExternalToInternal(
   const mnemonics = extractMnemonics(gameRomBranch.fixups) // Use fixups for mnemonics
   const overrides = extractOverrides(gameRomBranch.fixups) // Use fixups for overrides
   const rewrites = extractRewrites(gameRomBranch.fixups) // Use fixups for rewrites
-  const { stringTypes, stringCommands } = extractStringTypes(gameRomBranch.types)
-  const structs = extractStructs(gameRomBranch.types) // Use types for structs
+  const { stringTypes, stringCommands } = extractStringTypes(gameRomBranch.strings)
+  const structs = extractStructs(gameRomBranch.structs) // Use types for structs
 
   console.log('Data extraction summary:', {
     cops: cops.length,

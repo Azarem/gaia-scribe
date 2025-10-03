@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { db, supabase } from '../lib/supabase'
+import { useAuthStore } from '../stores/auth-store'
 
 interface PlatformSectionCounts {
   addressingModes: number
@@ -9,6 +10,7 @@ interface PlatformSectionCounts {
 }
 
 export function usePlatformSectionCounts(platformId: string | undefined) {
+  const { user, isAnonymousMode } = useAuthStore()
   const [counts, setCounts] = useState<PlatformSectionCounts>({
     addressingModes: 0,
     instructionSet: 0,
@@ -80,6 +82,12 @@ export function usePlatformSectionCounts(platformId: string | undefined) {
   // Real-time subscriptions for platform-related tables
   useEffect(() => {
     if (!platformId) return
+
+    // Skip realtime subscriptions in anonymous mode or without user
+    if (!user || isAnonymousMode) {
+      console.log('Skipping platform section counts realtime subscriptions - no authenticated user')
+      return
+    }
 
     const addressingModesChannel = supabase
       .channel(`addressing-modes-counts-${platformId}`)
@@ -155,7 +163,7 @@ export function usePlatformSectionCounts(platformId: string | undefined) {
       supabase.removeChannel(vectorsChannel)
       supabase.removeChannel(projectsChannel)
     }
-  }, [platformId, fetchCounts])
+  }, [platformId, fetchCounts, user, isAnonymousMode])
 
   return { counts, loading, error }
 }

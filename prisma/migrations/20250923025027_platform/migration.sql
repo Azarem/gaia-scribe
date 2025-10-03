@@ -306,7 +306,7 @@ BEGIN
     CREATE POLICY "Public or owned platforms are viewable by everyone"
     ON "Platform"
     FOR SELECT
-    TO authenticated
+    TO anon, authenticated
     USING ("deletedAt" IS NULL 
         AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()))
     );

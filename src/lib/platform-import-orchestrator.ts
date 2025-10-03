@@ -12,6 +12,7 @@
 import { db, createWorkingClient } from './supabase'
 import { logger } from './logger'
 import { createId } from '@paralleldrive/cuid2'
+import { PlatformBranchData } from '@gaialabs/shared'
 
 /**
  * Progress callback for import operations
@@ -32,34 +33,35 @@ export interface PlatformImportResult {
     instructionGroupsCreated: number
     instructionCodesCreated: number
     vectorsCreated: number
+    typesCreated: number
   }
 }
 
 /**
  * External PlatformBranch data structure
  */
-export interface ExternalPlatformBranchData {
-  id: string
-  name: string
-  version: string
-  platformId: string
-  addressingModes: any
-  instructionSet: any
-  vectors: any
-  platform: {
-    id: string
-    name: string
-    meta: any
-  }
-  createdAt: string
-  updatedAt: string
-}
+// export interface ExternalPlatformBranchData {
+//   id: string
+//   name: string
+//   version: string
+//   platformId: string
+//   addressingModes: any
+//   instructionSet: any
+//   vectors: any
+//   platform: {
+//     id: string
+//     name: string
+//     meta: any
+//   }
+//   createdAt: string
+//   updatedAt: string
+// }
 
 /**
  * Transform external PlatformBranch data to internal Platform format with nested data
  */
 export function transformPlatformBranchToInternal(
-  externalData: ExternalPlatformBranchData,
+  externalData: PlatformBranchData,
   _userId: string,
   platformName: string
 ) {
@@ -98,14 +100,25 @@ export function transformPlatformBranchToInternal(
     : []
 
   // Extract and transform vectors
-  const vectors = Array.isArray(externalData.vectors)
-    ? externalData.vectors.map((vector: any) => ({
-        name: vector.name || '',
-        address: vector.address || 0,
-        isEntry: vector.isEntry || false,
-        meta: vector.meta || null
+  const vectors = typeof externalData.vectors === 'object'
+    ? Object.entries(externalData.vectors).map(([vectorName, vectorData]: [string, any]) => ({
+        name: vectorName || '',
+        address: vectorData.id || 0,
+        isEntryPoint: vectorData.entry || false,
+        isRomHeader: vectorData.header || false,
+        meta: {
+          source: vectorData.meta || undefined
+        }
       }))
     : []
+    
+  // Extract and transform vectors
+  const types = typeof externalData.types === 'object'
+  ? Object.entries(externalData.types).map(([typeName, typeData]: [string, any]) => ({
+      ...typeData,
+      name: typeName,
+    }))
+  : []
 
   return {
     platform: {
@@ -131,7 +144,8 @@ export function transformPlatformBranchToInternal(
     addressingModes,
     instructionGroups,
     instructionCodes,
-    vectors
+    vectors,
+    types
   }
 }
 
@@ -300,7 +314,8 @@ export class PlatformImportOrchestrator {
         addressingModesCreated: 0,
         instructionGroupsCreated: 0,
         instructionCodesCreated: 0,
-        vectorsCreated: 0
+        vectorsCreated: 0,
+        typesCreated: 0
       }
 
       onProgress?.('Importing addressing modes...', 5, 8)
@@ -419,6 +434,29 @@ export class PlatformImportOrchestrator {
         }
       }
 
+      // Step 9: Import Platform Types
+      if (internalData.types && internalData.types.length > 0) {
+        logger.platform.import(`Importing ${internalData.types.length} platform types`)
+        
+        const platformTypesToInsert = internalData.types.map((type: any) => ({
+          id: createId(),
+          ...type,
+          platformId: platformId,
+          createdBy: userId
+        }))
+        
+        const { error: platformTypesError } = await supabase
+          .from('PlatformType')
+          .insert(platformTypesToInsert)
+
+        if (platformTypesError) {
+          logger.platform.error('Failed to insert platform types', platformTypesError)
+        } else {
+          importDetails.typesCreated = platformTypesToInsert.length
+          logger.platform.import(`Successfully imported ${platformTypesToInsert.length} platform types`)
+        }
+      }
+
       logger.platform.import('Platform import completed successfully', {
         platformId,
         importDetails
@@ -486,51 +524,51 @@ export class PlatformImportOrchestrator {
    * @param platformBranchId - External platform branch ID
    * @returns Promise with validation result
    */
-  async validateExternalPlatform(platformBranchId: string) {
-    try {
-      logger.platform.import('Validating external platform for import', { platformBranchId })
+  // async validateExternalPlatform(platformBranchId: string) {
+  //   try {
+  //     logger.platform.import('Validating external platform for import', { platformBranchId })
       
-      // Check if we can fetch the complete platform data
-      const { data: externalData, error: fetchError } = await db.external.getPlatformBranchById(platformBranchId)
+  //     // Check if we can fetch the complete platform data
+  //     const { data: externalData, error: fetchError } = await db.external.getPlatformBranchById(platformBranchId)
       
-      if (fetchError || !externalData) {
-        return {
-          success: false,
-          error: `Cannot fetch platform data: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`
-        }
-      }
+  //     if (fetchError || !externalData) {
+  //       return {
+  //         success: false,
+  //         error: `Cannot fetch platform data: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`
+  //       }
+  //     }
 
-      // Validate the external data structure
-      if (!externalData.platform || !externalData.platform.name) {
-        return {
-          success: false,
-          error: 'Invalid platform data: missing platform information'
-        }
-      }
+  //     // Validate the external data structure
+  //     if (!externalData.platform || !externalData.platform.name) {
+  //       return {
+  //         success: false,
+  //         error: 'Invalid platform data: missing platform information'
+  //       }
+  //     }
 
-      if (!externalData.name) {
-        return {
-          success: false,
-          error: 'Invalid platform data: missing branch name'
-        }
-      }
+  //     if (!externalData.name) {
+  //       return {
+  //         success: false,
+  //         error: 'Invalid platform data: missing branch name'
+  //       }
+  //     }
 
-      return {
-        success: true,
-        data: {
-          platformName: externalData.platform.name,
-          branchName: externalData.name,
-          version: externalData.version
-        }
-      }
-    } catch (error) {
-      logger.platform.error('validating external platform', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    }
-  }
+  //     return {
+  //       success: true,
+  //       data: {
+  //         platformName: externalData.platform.name,
+  //         branchName: externalData.name,
+  //         version: externalData.version
+  //       }
+  //     }
+  //   } catch (error) {
+  //     logger.platform.error('validating external platform', error)
+  //     return {
+  //       success: false,
+  //       error: error instanceof Error ? error.message : 'Unknown error'
+  //     }
+  //   }
+  // }
 }
 
 /**

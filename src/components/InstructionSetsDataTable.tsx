@@ -20,7 +20,7 @@ export default function InstructionSetsDataTable({
   columns,
   ...props
 }: InstructionSetsDataTableProps) {
-  const { user } = useAuthStore()
+  const { user, isAnonymousMode } = useAuthStore()
   const { canManage } = usePlatformPermissions(platformId)
   const [data, setData] = useState<InstructionGroupWithCodes[]>([])
   const [instructionCodes, setInstructionCodes] = useState<{ [groupId: string]: InstructionCode[] }>({})
@@ -95,6 +95,12 @@ export default function InstructionSetsDataTable({
   // Real-time subscriptions
   useEffect(() => {
     if (!platformId) return
+
+    // Skip realtime subscriptions in anonymous mode or without user
+    if (!user || isAnonymousMode) {
+      console.log('Skipping InstructionGroup/InstructionCode realtime subscriptions - no authenticated user')
+      return
+    }
 
     const groupsChannel = supabase
       .channel(`instruction-groups-${platformId}`)
@@ -174,7 +180,7 @@ export default function InstructionSetsDataTable({
       supabase.removeChannel(groupsChannel)
       supabase.removeChannel(codesChannel)
     }
-  }, [platformId])
+  }, [platformId, user, isAnonymousMode])
 
   // Toggle group expansion
   const toggleGroupExpansion = (groupId: string) => {

@@ -2,8 +2,10 @@ import { createClient } from '@supabase/supabase-js'
 import { createId } from '@paralleldrive/cuid2'
 import type {
   ProjectBranchData,
-  GameRomBranchData
+  GameRomBranchData,
+  PlatformBranchData
 } from '@gaialabs/shared'
+import { isAnonymousModeEnabled, ANONYMOUS_USER_ID } from './environment'
 
 const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL as string
 const supabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY as string
@@ -52,6 +54,23 @@ let cachedWorkingClient: any = null
 let cachedAccessToken: string | null = null
 
 export const createWorkingClient = () => {
+  // In anonymous mode, always use the anon key without authentication
+  if (isAnonymousModeEnabled()) {
+    console.log('Creating working client for anonymous mode...')
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    })
+  }
+
   // Get session token from localStorage directly
   let accessToken = null
   try {
@@ -1419,6 +1438,20 @@ export const db = {
       try {
         console.log('Starting user sync for:', authUser.id)
 
+        // Skip user sync in anonymous mode
+        if (isAnonymousModeEnabled() && authUser.id === ANONYMOUS_USER_ID) {
+          console.log('Skipping user sync in anonymous mode')
+          return {
+            data: {
+              id: ANONYMOUS_USER_ID,
+              email: 'anonymous@localhost.dev',
+              name: 'Anonymous Developer',
+              avatarUrl: null
+            },
+            error: null
+          }
+        }
+
         // Create a working client with proper authentication headers
         const workingClient = createWorkingClient()
         console.log('Using working client with direct token authentication')
@@ -2038,7 +2071,7 @@ export const db = {
         console.log('Fetching GameRomBranch data for:', gameRomBranchId)
 
         // Fetch GameRomBranch with all nested relationships needed for import
-        const url = `${EXTERNAL_SUPABASE_URL}/rest/v1/GameRomBranch?select=*,gameRom:GameRom!inner(id,crc,meta,gameId,regionId,game:Game!inner(id,name),region:Region!inner(id,name,meta,platformId)),platformBranch:PlatformBranch!inner(id,name,version,platformId,addressingModes,instructionSet,vectors,platform:Platform!inner(id,name,meta))&id=eq.${encodeURIComponent(gameRomBranchId)}&limit=1`
+        const url = `${EXTERNAL_SUPABASE_URL}/rest/v1/GameRomBranch?select=*,gameRom:GameRom!inner(id,crc,meta,gameId,regionId,game:Game!inner(id,name),region:Region!inner(id,name,meta,platformId)),platformBranch:PlatformBranch!inner(id,name,version,platformId,addressingModes,instructionSet,vectors,types,platform:Platform!inner(id,name,meta))&id=eq.${encodeURIComponent(gameRomBranchId)}&limit=1`
 
         const response = await fetch(url, {
           headers: {
@@ -2061,74 +2094,74 @@ export const db = {
       }
     },
 
-    async getBaseRomBranchById(baseRomBranchId: string) {
-      try {
-        console.log('Fetching BaseRomBranch data for:', baseRomBranchId)
+    // async getBaseRomBranchById(baseRomBranchId: string) {
+    //   try {
+    //     console.log('Fetching BaseRomBranch data for:', baseRomBranchId)
 
-        // Fetch BaseRomBranch with all nested relationships needed for import
-        const url = `${EXTERNAL_SUPABASE_URL}/rest/v1/BaseRomBranch?select=*,baseRom:BaseRom!inner(id,name,gameId,gameRomId),gameRomBranch:GameRomBranch!inner(id,name,version,gameRomId,platformBranchId,coplib,config,files,blocks,fixups,types,gameRom:GameRom!inner(id,crc,meta,gameId,regionId,game:Game!inner(id,name),region:Region!inner(id,name,meta,platformId)),platformBranch:PlatformBranch!inner(id,name,version,platformId,addressingModes,instructionSet,vectors,platform:Platform!inner(id,name,meta)))&id=eq.${encodeURIComponent(baseRomBranchId)}&limit=1`
+    //     // Fetch BaseRomBranch with all nested relationships needed for import
+    //     const url = `${EXTERNAL_SUPABASE_URL}/rest/v1/BaseRomBranch?select=*,baseRom:BaseRom!inner(id,name,gameId,gameRomId),gameRomBranch:GameRomBranch!inner(id,name,version,gameRomId,platformBranchId,coplib,config,files,blocks,fixups,strings,structs,gameRom:GameRom!inner(id,crc,meta,gameId,regionId,game:Game!inner(id,name),region:Region!inner(id,name,meta,platformId)),platformBranch:PlatformBranch!inner(id,name,version,platformId,addressingModes,instructionSet,vectors,types,platform:Platform!inner(id,name,meta)))&id=eq.${encodeURIComponent(baseRomBranchId)}&limit=1`
 
-        const response = await fetch(url, {
-          headers: {
-            'apikey': EXTERNAL_SUPABASE_KEY,
-            'Authorization': `Bearer ${EXTERNAL_SUPABASE_KEY}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        })
+    //     const response = await fetch(url, {
+    //       headers: {
+    //         'apikey': EXTERNAL_SUPABASE_KEY,
+    //         'Authorization': `Bearer ${EXTERNAL_SUPABASE_KEY}`,
+    //         'Content-Type': 'application/json',
+    //         'Accept': 'application/json'
+    //       }
+    //     })
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        }
+    //     if (!response.ok) {
+    //       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    //     }
 
-        const data = await response.json()
-        return { data: data[0] || null, error: null }
-      } catch (error) {
-        console.error('Error fetching BaseRomBranch:', error)
-        return { data: null, error }
-      }
-    },
+    //     const data = await response.json()
+    //     return { data: data[0] || null, error: null }
+    //   } catch (error) {
+    //     console.error('Error fetching BaseRomBranch:', error)
+    //     return { data: null, error }
+    //   }
+    // },
 
-    async getCompleteProjectData(projectBranchId: string) {
-      try {
-        console.log('Fetching complete project data for:', projectBranchId)
+    // async getCompleteProjectData(projectBranchId: string) {
+    //   try {
+    //     console.log('Fetching complete project data for:', projectBranchId)
 
-        // First get the project branch with all nested relationships
-        const { data: projectBranch, error: projectError } = await this.getProjectBranchById(projectBranchId)
-        if (projectError || !projectBranch) {
-          const errorMsg = projectError instanceof Error ? projectError.message : 'Not found'
-          throw new Error(`Failed to fetch project branch: ${errorMsg}`)
-        }
+    //     // First get the project branch with all nested relationships
+    //     const { data: projectBranch, error: projectError } = await this.getProjectBranchById(projectBranchId)
+    //     if (projectError || !projectBranch) {
+    //       const errorMsg = projectError instanceof Error ? projectError.message : 'Not found'
+    //       throw new Error(`Failed to fetch project branch: ${errorMsg}`)
+    //     }
 
-        // Get the complete BaseRomBranch data with all nested relationships
-        const { data: baseRomBranch, error: baseRomError } = await this.getBaseRomBranchById(projectBranch.baseRomBranchId)
-        if (baseRomError || !baseRomBranch) {
-          const errorMsg = baseRomError instanceof Error ? baseRomError.message : 'Not found'
-          throw new Error(`Failed to fetch base ROM branch: ${errorMsg}`)
-        }
+    //     // Get the complete BaseRomBranch data with all nested relationships
+    //     const { data: baseRomBranch, error: baseRomError } = await this.getBaseRomBranchById(projectBranch.baseRomBranchId)
+    //     if (baseRomError || !baseRomBranch) {
+    //       const errorMsg = baseRomError instanceof Error ? baseRomError.message : 'Not found'
+    //       throw new Error(`Failed to fetch base ROM branch: ${errorMsg}`)
+    //     }
 
-        return {
-          data: {
-            projectBranch,
-            baseRomBranch,
-            gameRomBranch: baseRomBranch.gameRomBranch,
-            platformBranch: baseRomBranch.gameRomBranch.platformBranch,
-            platform: baseRomBranch.gameRomBranch.platformBranch.platform,
-            gameRom: baseRomBranch.gameRomBranch.gameRom,
-            game: baseRomBranch.gameRomBranch.gameRom.game,
-            region: baseRomBranch.gameRomBranch.gameRom.region,
-            baseRom: baseRomBranch.baseRom
-          },
-          error: null
-        }
-      } catch (error) {
-        console.error('Error fetching complete project data:', error)
-        return { data: null, error }
-      }
-    },
+    //     return {
+    //       data: {
+    //         projectBranch,
+    //         baseRomBranch,
+    //         gameRomBranch: baseRomBranch.gameRomBranch,
+    //         platformBranch: baseRomBranch.gameRomBranch.platformBranch,
+    //         platform: baseRomBranch.gameRomBranch.platformBranch.platform,
+    //         gameRom: baseRomBranch.gameRomBranch.gameRom,
+    //         game: baseRomBranch.gameRomBranch.gameRom.game,
+    //         region: baseRomBranch.gameRomBranch.gameRom.region,
+    //         baseRom: baseRomBranch.baseRom
+    //       },
+    //       error: null
+    //     }
+    //   } catch (error) {
+    //     console.error('Error fetching complete project data:', error)
+    //     return { data: null, error }
+    //   }
+    // },
 
     // Platform Branch search and import methods
-    async searchPlatformBranches(searchQuery?: string) {
+    async searchPlatformBranches(searchQuery?: string) : Promise<{data: PlatformBranchData[] | null, error: Error | null}> {
       try {
         // Search PlatformBranches with platform name filtering
         let url = `${EXTERNAL_SUPABASE_URL}/rest/v1/PlatformBranch?select=*,platform:Platform!inner(id,name,meta)&order=updatedAt.desc&limit=20`
@@ -2155,11 +2188,11 @@ export const db = {
         return { data, error: null }
       } catch (error) {
         console.error('Error searching PlatformBranches:', error)
-        return { data: null, error }
+        return { data: null, error: error instanceof Error ? error : new Error(String(error)) }
       }
     },
 
-    async getPlatformBranchById(id: string) {
+    async getPlatformBranchById(id: string) : Promise<{data: PlatformBranchData | null, error: Error | null}> {
       try {
         // Include platform data with name field using proper JOIN
         const url = `${EXTERNAL_SUPABASE_URL}/rest/v1/PlatformBranch?select=*,platform:Platform!inner(id,name,meta)&id=eq.${encodeURIComponent(id)}&limit=1`
@@ -2187,7 +2220,7 @@ export const db = {
         return { data: platformBranch, error: null }
       } catch (error) {
         console.error('Error fetching PlatformBranch:', error)
-        return { data: null, error }
+        return { data: null, error: error instanceof Error ? error : new Error(String(error)) }
       }
     }
   }

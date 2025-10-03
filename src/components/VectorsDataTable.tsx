@@ -15,7 +15,7 @@ export default function VectorsDataTable({
   columns,
   ...props
 }: VectorsDataTableProps) {
-  const { user } = useAuthStore()
+  const { user, isAnonymousMode } = useAuthStore()
   const { canManage } = usePlatformPermissions(platformId)
   const [data, setData] = useState<Vector[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,6 +56,12 @@ export default function VectorsDataTable({
   useEffect(() => {
     if (!platformId) return
 
+    // Skip realtime subscriptions in anonymous mode or without user
+    if (!user || isAnonymousMode) {
+      console.log('Skipping Vector realtime subscription - no authenticated user')
+      return
+    }
+
     const channel = supabase
       .channel(`vectors-${platformId}`)
       .on(
@@ -88,21 +94,13 @@ export default function VectorsDataTable({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [platformId])
+  }, [platformId, user, isAnonymousMode])
 
   // CRUD operations
   const handleAdd = async (newItem: Partial<Vector>) => {
     if (!user?.id) throw new Error('User not authenticated')
 
-    const vectorData = {
-      name: newItem.name || '',
-      address: newItem.address || 0,
-      isEntry: newItem.isEntry || false,
-      meta: newItem.meta,
-      platformId
-    }
-
-    const { data: created, error } = await db.vectors.create(vectorData, user.id)
+    const { data: created, error } = await db.vectors.create(newItem, user.id)
 
     if (error) {
       throw new Error(error.message)

@@ -6,23 +6,24 @@ import { db } from '../lib/supabase'
 import { createPlatformImportOrchestrator, type PlatformImportProgressCallback } from '../lib/platform-import-orchestrator'
 import type { Platform } from '@prisma/client'
 import clsx from 'clsx'
+import { PlatformBranchData } from '@gaialabs/shared'
 
-interface PlatformBranchData {
-  id: string
-  name: string
-  version: string
-  platformId: string
-  addressingModes: any
-  instructionSet: any
-  vectors: any
-  platform: {
-    id: string
-    name: string
-    meta: any
-  }
-  createdAt: string
-  updatedAt: string
-}
+// interface PlatformBranchData {
+//   id: string
+//   name: string
+//   version: string
+//   platformId: string
+//   addressingModes: any
+//   instructionSet: any
+//   vectors: any
+//   platform: {
+//     id: string
+//     name: string
+//     meta: any
+//   }
+//   createdAt: string
+//   updatedAt: string
+// }
 
 interface ImportPlatformModalProps {
   isOpen: boolean
@@ -67,7 +68,7 @@ export default function ImportPlatformModal({
         return
       }
 
-      setPlatformBranches(data || [])
+      setPlatformBranches(data ?? [])
       
       if (!data || data.length === 0) {
         setError('No platforms found matching your search.')

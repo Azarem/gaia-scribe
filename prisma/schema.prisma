@@ -87,6 +87,9 @@ model User {
   createdVectors Vector[] @relation("vectorCreatedBy")
   updatedVectors Vector[] @relation("vectorUpdatedBy")
   deletedVectors Vector[] @relation("vectorDeletedBy")
+  createdPlatformTypes PlatformType[] @relation("platformTypeCreatedBy")
+  updatedPlatformTypes PlatformType[] @relation("platformTypeUpdatedBy")
+  deletedPlatformTypes PlatformType[] @relation("platformTypeDeletedBy")
 
   createdAt DateTime @default(now())
   createdBy String @db.Uuid
@@ -182,7 +185,7 @@ model Cop {
   code     Int
   mnemonic String   // "00", "01", "02", etc.
   parts    String[] @default([])
-  halt     Boolean  @default(false)
+  halt     Boolean? @default(false)
   
   // Owner
   project   ScribeProject @relation(fields: [projectId], references: [id])
@@ -584,6 +587,7 @@ model Platform {
   instructionSet  InstructionGroup[]
   vectors         Vector[]
   projects        ScribeProject[]
+  types           PlatformType[]
 
   //Audit Fields
   createdAt     DateTime @default(now())
@@ -695,7 +699,9 @@ model Vector {
   id          String   @id @default(cuid())
   name        String   // e.g., "NMI", "IRQ", "BRK"
   address     Int      // e.g., 0xFFFA, 0xFFFE, 0xFFE7
-  isEntry     Boolean  @default(false)
+  isEntryPoint Boolean  @default(false)
+  isRomHeader Boolean  @default(false)
+  description String?
   meta        Json?
   
   platform    Platform @relation(fields: [platformId], references: [id])
@@ -712,6 +718,41 @@ model Vector {
   updatedBy     String? @db.Uuid
   updatedByUser User? @relation(name: "vectorUpdatedBy", fields: [updatedBy], references: [id])
   
+  @@index([platformId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([deletedBy])
+}
+
+model PlatformType {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "Byte", "Word", "Address"
+  description String?
+  size        Int      // e.g., 1, 2, 3
+  isPrimitive Boolean  @default(false)
+  isPointer   Boolean  @default(false)
+  isSigned    Boolean  @default(false)
+  isRelative  Boolean  @default(false)
+  isBank      Boolean  @default(false)
+  isData      Boolean  @default(false)
+  isCode      Boolean  @default(false)
+  pointerChar String?  // e.g., '@', '^', '&'
+  meta        Json?
+  
+  platform    Platform @relation(fields: [platformId], references: [id])
+  platformId  String
+
+  //Audit Fields
+  createdAt     DateTime @default(now())
+  createdBy     String @db.Uuid
+  createdByUser User @relation(name: "platformTypeCreatedBy", fields: [createdBy], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String? @db.Uuid
+  deletedByUser User? @relation(name: "platformTypeDeletedBy", fields: [deletedBy], references: [id])
+  updatedAt     DateTime? @updatedAt
+  updatedBy     String? @db.Uuid
+  updatedByUser User? @relation(name: "platformTypeUpdatedBy", fields: [updatedBy], references: [id])
+
   @@index([platformId])
   @@index([createdBy])
   @@index([updatedBy])

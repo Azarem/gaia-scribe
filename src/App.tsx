@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth-store'
-
+import { isAnonymousModeEnabled } from './lib/environment'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
@@ -38,9 +38,13 @@ import ArtifactViewerPanel from './components/ArtifactViewerPanel'
 }(window.location))
 
 function App() {
-  const { user } = useAuthStore()
+  const { user, isAnonymousMode } = useAuthStore()
+
   // Auth state management is handled in auth-store.ts
   // No need to duplicate it here
+
+  // In anonymous mode, always redirect to dashboard instead of login
+  const shouldRedirectToDashboard = user || isAnonymousModeEnabled() || isAnonymousMode
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -51,7 +55,7 @@ function App() {
         <Routes>
           <Route
             path="/login"
-            element={user ? <Navigate to="/dashboard" /> : <LoginPage />}
+            element={shouldRedirectToDashboard ? <Navigate to="/dashboard" /> : <LoginPage />}
           />
           <Route
             path="/auth/callback"
@@ -99,7 +103,7 @@ function App() {
           />
           <Route
             path="/"
-            element={<Navigate to={user ? "/dashboard" : "/login"} />}
+            element={<Navigate to={shouldRedirectToDashboard ? "/dashboard" : "/login"} />}
           />
         </Routes>
       </div>

@@ -686,46 +686,46 @@ export class ImportOrchestrator {
    * @param projectBranchId - External project branch ID
    * @returns Promise with validation result
    */
-  async validateExternalProject(projectBranchId: string) {
-    try {
-      console.log('Validating external project for import:', projectBranchId)
+  // async validateExternalProject(projectBranchId: string) {
+  //   try {
+  //     console.log('Validating external project for import:', projectBranchId)
       
-      // Check if we can fetch the complete project data
-      const { data: externalData, error: fetchError } = await db.external.getCompleteProjectData(projectBranchId)
+  //     // Check if we can fetch the complete project data
+  //     const { data: externalData, error: fetchError } = await db.external.getCompleteProjectData(projectBranchId)
       
-      if (fetchError || !externalData) {
-        return {
-          success: false,
-          error: `Cannot fetch project data: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`
-        }
-      }
+  //     if (fetchError || !externalData) {
+  //       return {
+  //         success: false,
+  //         error: `Cannot fetch project data: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`
+  //       }
+  //     }
       
-      // Check if project name would conflict
-      const projectName = externalData.projectBranch.project?.name || `Imported Project ${projectBranchId}`
-      const { data: existingProjects } = await db.projects.getByName(projectName)
+  //     // Check if project name would conflict
+  //     const projectName = externalData.projectBranch.project?.name || `Imported Project ${projectBranchId}`
+  //     const { data: existingProjects } = await db.projects.getByName(projectName)
 
-      if (existingProjects && existingProjects.length > 0) {
-        return {
-          success: false,
-          error: `A project with the name "${projectName}" already exists`
-        }
-      }
+  //     if (existingProjects && existingProjects.length > 0) {
+  //       return {
+  //         success: false,
+  //         error: `A project with the name "${projectName}" already exists`
+  //       }
+  //     }
       
-      return {
-        success: true,
-        projectName,
-        message: 'Project can be imported successfully'
-      }
+  //     return {
+  //       success: true,
+  //       projectName,
+  //       message: 'Project can be imported successfully'
+  //     }
       
-    } catch (error) {
-      console.error('Project validation failed:', error)
+  //   } catch (error) {
+  //     console.error('Project validation failed:', error)
       
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred during validation'
-      }
-    }
-  }
+  //     return {
+  //       success: false,
+  //       error: error instanceof Error ? error.message : 'Unknown error occurred during validation'
+  //     }
+  //   }
+  // }
 }
 
 /**

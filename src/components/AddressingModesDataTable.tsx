@@ -24,7 +24,7 @@ export default function AddressingModesDataTable({
   platformId,
   ...props
 }: AddressingModesDataTableProps) {
-  const { user } = useAuthStore()
+  const { user, isAnonymousMode } = useAuthStore()
   const { canManage } = usePlatformPermissions(platformId)
   const [data, setData] = useState<AddressingModeWithInstructionCodes[]>([])
   const [loading, setLoading] = useState(true)
@@ -150,6 +150,12 @@ export default function AddressingModesDataTable({
   useEffect(() => {
     if (!platformId) return
 
+    // Skip realtime subscriptions in anonymous mode or without user
+    if (!user || isAnonymousMode) {
+      console.log('Skipping AddressingMode realtime subscription - no authenticated user')
+      return
+    }
+
     const channel = supabase
       .channel(`addressing-modes-${platformId}`)
       .on(
@@ -186,11 +192,17 @@ export default function AddressingModesDataTable({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [platformId])
+  }, [platformId, user, isAnonymousMode])
 
   // Real-time subscription for InstructionCode changes
   useEffect(() => {
     if (!platformId) return
+
+    // Skip realtime subscriptions in anonymous mode or without user
+    if (!user || isAnonymousMode) {
+      console.log('Skipping InstructionCode realtime subscription - no authenticated user')
+      return
+    }
 
     const channel = supabase
       .channel(`instruction-codes-${platformId}`)
@@ -212,7 +224,7 @@ export default function AddressingModesDataTable({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [platformId, loadData])
+  }, [platformId, loadData, user, isAnonymousMode])
 
   // CRUD operations
   const handleAdd = async (newItem: Partial<AddressingMode>) => {

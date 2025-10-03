@@ -16,7 +16,7 @@ import { useAuthStore } from '../stores/auth-store'
 export default function PlatformDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user, isAnonymousMode } = useAuthStore()
 
   const [platform, setPlatform] = useState<Platform | null>(null)
   const [loading, setLoading] = useState(true)
@@ -65,6 +65,12 @@ export default function PlatformDetailPage() {
 
     loadPlatform()
 
+    // Skip realtime subscriptions in anonymous mode or without user
+    if (!user || isAnonymousMode) {
+      logger.platform.realtime('Skipping platform realtime subscription - no authenticated user')
+      return
+    }
+
     // Set up realtime subscription for platform changes
     if (id) {
       const channel = supabase
@@ -94,7 +100,7 @@ export default function PlatformDetailPage() {
         supabase.removeChannel(channel)
       }
     }
-  }, [id, navigate])
+  }, [id, navigate, user, isAnonymousMode])
 
   // Use permission-based checks for UI controls
   const showManagementActions = canManage && !permissionsLoading

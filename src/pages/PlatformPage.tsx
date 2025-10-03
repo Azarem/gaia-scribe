@@ -15,7 +15,7 @@ type PlatformWithCreator = Platform
 
 export default function PlatformPage() {
   const navigate = useNavigate()
-  const { user, session, loading: authLoading, initialized } = useAuthStore()
+  const { user, session, loading: authLoading, initialized, isAnonymousMode } = useAuthStore()
   const [platforms, setPlatforms] = useState<PlatformWithCreator[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreatePlatform, setShowCreatePlatform] = useState(false)
@@ -69,6 +69,12 @@ export default function PlatformPage() {
     }
 
     loadPlatforms()
+
+    // Skip realtime subscriptions in anonymous mode
+    if (isAnonymousMode) {
+      logger.platform.realtime('Skipping platform realtime subscriptions in anonymous mode')
+      return
+    }
 
     // Set up realtime subscription for platform changes
     const setupRealtimeSubscription = async () => {
@@ -153,7 +159,7 @@ export default function PlatformPage() {
         supabase.removeChannel(channelRef)
       }
     }
-    }, [user, session, initialized, authLoading])
+    }, [user, session, initialized, authLoading, isAnonymousMode])
 
   const handleSignOut = async () => {
     await signOut()

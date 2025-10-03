@@ -941,7 +941,7 @@ BEGIN
     CREATE POLICY "Public or owned projects are viewable by everyone"
     ON "ScribeProject"
     FOR SELECT
-    TO authenticated
+    TO anon, authenticated
     USING ("deletedAt" IS NULL 
         AND ("isPublic" = true OR "createdBy" = (SELECT auth.uid()) OR EXISTS (
             SELECT 1 FROM "ProjectUser" pu

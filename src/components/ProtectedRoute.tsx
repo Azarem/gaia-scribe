@@ -1,13 +1,19 @@
 import { useAuthStore } from '../stores/auth-store'
 import { Navigate } from 'react-router-dom'
 import { ReactNode } from 'react'
+import { isAnonymousModeEnabled } from '../lib/environment'
 
 interface ProtectedRouteProps {
   children: ReactNode
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuthStore()
+  const { user, loading, isAnonymousMode } = useAuthStore()
+
+  // In anonymous mode, always allow access
+  if (isAnonymousModeEnabled() || isAnonymousMode) {
+    return <>{children}</>
+  }
 
   if (loading) {
     return (

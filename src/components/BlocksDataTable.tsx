@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Check, X, Edit2, Trash2, Hammer, Eye } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Check, X, Trash2, Hammer, Eye, Plus } from 'lucide-react'
 import DataTable, { type DataTableProps } from './DataTable'
 import { useAuthStore } from '../stores/auth-store'
 import { useArtifactViewerStore } from '../stores/artifact-viewer-store'
-import { db } from '../lib/supabase'
+import { db, supabase } from '../lib/supabase'
 import type { Block, BlockPart, ScribeProject } from '@prisma/client'
 import clsx from 'clsx'
 import RomPathModal from './RomPathModal'
@@ -16,6 +16,71 @@ interface BlockWithAddresses extends Block {
   parts?: BlockPart[]
 }
 
+// Unified row structure for inline editing
+interface BaseGridRow {
+  id: string
+  rowType: 'block' | 'part'
+  level: number // 0 for blocks, 1 for parts
+  parentId?: string // For parts, this is the block ID
+  isExpanded?: boolean // For blocks with parts
+  isDirty?: boolean // Has unsaved changes
+  originalData?: any // Original values before editing
+}
+
+interface BlockGridRow extends BaseGridRow {
+  rowType: 'block'
+  // Block-specific fields
+  name: string
+  startAddress?: number
+  endAddress?: number
+  movable?: boolean
+  group?: string | null
+  scene?: string | null
+  postProcess?: string | null
+  meta?: any
+  projectId?: string
+  // Audit fields
+  createdAt: Date
+  createdBy: string
+  updatedAt?: Date | null
+  updatedBy?: string | null
+  deletedAt?: Date | null
+  deletedBy?: string | null
+}
+
+interface PartGridRow extends BaseGridRow {
+  rowType: 'part'
+  blockId: string
+  // Part-specific fields
+  name: string
+  location: number
+  size: number
+  end?: number // Calculated field: location + size
+  type: string
+  index?: number | null
+  // Audit fields
+  createdAt: Date
+  createdBy: string
+  updatedAt?: Date | null
+  updatedBy?: string | null
+  deletedAt?: Date | null
+  deletedBy?: string | null
+}
+
+type GridRow = BlockGridRow | PartGridRow
+
+// Editable field configuration
+interface EditableField {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'hex' | 'boolean' | 'select'
+  required?: boolean
+  validate?: (value: any) => string | null
+  options?: { value: any; label: string }[] // For select type
+  placeholder?: string
+  rowTypes: ('block' | 'part')[] // Which row types this field applies to
+}
+
 interface BlocksDataTableProps extends Omit<DataTableProps<BlockWithAddresses>, 'data'> {
   data: Block[]
   projectId: string
@@ -24,7 +89,7 @@ interface BlocksDataTableProps extends Omit<DataTableProps<BlockWithAddresses>, 
 }
 
 export default function BlocksDataTable({ data, projectId, project, onBuildComplete, columns, ...props }: BlocksDataTableProps) {
-  const { user } = useAuthStore()
+  const { user, isAnonymousMode } = useAuthStore()
   const { openPanel } = useArtifactViewerStore()
   const [currentBank, setCurrentBank] = useState<number>(0)
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set())
@@ -32,11 +97,117 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
   const [partsLoading, setPartsLoading] = useState(false)
   const [partsError, setPartsError] = useState<string | null>(null)
   const [dataReady, setDataReady] = useState(false)
-  const [addPartFormData, setAddPartFormData] = useState<{ [blockId: string]: Partial<BlockPart> }>({})
-  const [partValidationErrors, setPartValidationErrors] = useState<{ [blockId: string]: Record<string, string> }>({})
-  const [editingPartId, setEditingPartId] = useState<string | null>(null)
-  const [editPartFormData, setEditPartFormData] = useState<Partial<BlockPart>>({})
-  const [editPartValidationErrors, setEditPartValidationErrors] = useState<Record<string, string>>({})
+
+  // Inline editing state
+  const [editingCells, setEditingCells] = useState<Set<string>>(new Set()) // Set of "rowId:fieldKey"
+  const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set()) // Set of row IDs with unsaved changes
+  const [editingData, setEditingData] = useState<{ [rowId: string]: Record<string, any> }>({}) // Temporary editing values
+  const [originalData, setOriginalData] = useState<{ [rowId: string]: GridRow }>({}) // Original values for revert
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({}) // "rowId:fieldKey" -> error message
+  const [savingRows, setSavingRows] = useState<Set<string>>(new Set()) // Set of row IDs currently being saved
+
+
+
+  // Field configuration for inline editing
+  const editableFields: EditableField[] = useMemo(() => [
+    {
+      key: 'name',
+      label: 'Name',
+      type: 'text',
+      required: true,
+      rowTypes: ['block', 'part'],
+      validate: (value: string) => {
+        if (!value?.trim()) return 'Name is required'
+        if (value.length > 100) return 'Name must be 100 characters or less'
+        return null
+      }
+    },
+    {
+      key: 'location',
+      label: 'Start',
+      type: 'hex',
+      required: true,
+      rowTypes: ['part'],
+      placeholder: '1000',
+      validate: (value: number) => {
+        if (value === null || value === undefined) return 'Start is required'
+        if (value < 0 || value > 0xFFFFFF) return 'Start must be between 0x000000 and 0xFFFFFF'
+        return null
+      }
+    },
+    {
+      key: 'end',
+      label: 'End',
+      type: 'hex',
+      required: true,
+      rowTypes: ['part'],
+      placeholder: '1C00',
+      validate: (value: number) => {
+        if (value === null || value === undefined) return 'End is required'
+        if (value < 0 || value > 0xFFFFFF) return 'End must be between 0x000000 and 0xFFFFFF'
+        return null
+      }
+    },
+    {
+      key: 'size',
+      label: 'Size',
+      type: 'hex',
+      required: true,
+      rowTypes: ['part'],
+      placeholder: '0C00',
+      validate: (value: number) => {
+        if (!value || value <= 0) return 'Size must be a positive number'
+        if (value > 0xFFFF) return 'Size must be 0xFFFF or less'
+        return null
+      }
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      type: 'select',
+      required: true,
+      rowTypes: ['part'],
+      options: [
+        { value: 'Code', label: 'Code' },
+        { value: 'Data', label: 'Data' },
+        { value: 'Graphics', label: 'Graphics' },
+        { value: 'Audio', label: 'Audio' },
+        { value: 'Text', label: 'Text' }
+      ],
+      validate: (value: string) => {
+        if (!value?.trim()) return 'Type is required'
+        return null
+      }
+    },
+    {
+      key: 'index',
+      label: 'Order',
+      type: 'number',
+      rowTypes: ['part'],
+      validate: (value: number) => {
+        if (value !== null && value !== undefined && value < 0) return 'Order must be non-negative'
+        return null
+      }
+    },
+    {
+      key: 'movable',
+      label: 'Movable',
+      type: 'boolean',
+      rowTypes: ['block']
+    },
+    {
+      key: 'group',
+      label: 'Group',
+      type: 'text',
+      rowTypes: ['block']
+    },
+    {
+      key: 'postProcess',
+      label: 'Process',
+      type: 'text',
+      rowTypes: ['block']
+    }
+  ], [])
 
   // Build-related state
   const [showRomPathModal, setShowRomPathModal] = useState(false)
@@ -112,6 +283,118 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
     fetchBlockParts()
   }, [projectId, data.length])
+
+  // Real-time subscriptions for collaborative editing
+  useEffect(() => {
+    if (!projectId) return
+
+    // Skip realtime subscriptions in anonymous mode or without user
+    if (!user || isAnonymousMode) {
+      console.log('Skipping BlockPart realtime subscription - no authenticated user')
+      return
+    }
+
+    // Subscribe to BlockPart changes
+    const blockPartsChannel = supabase
+      .channel('blockparts-changes')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'BlockPart',
+        filter: `blockId=in.(${data.map(block => block.id).join(',')})`
+      }, (payload) => {
+        const newPart = payload.new as BlockPart
+        setBlockParts(prev => {
+          const updated = { ...prev }
+          if (!updated[newPart.blockId]) {
+            updated[newPart.blockId] = []
+          }
+          // Check if part already exists to avoid duplicates
+          const existingIndex = updated[newPart.blockId].findIndex(p => p.id === newPart.id)
+          if (existingIndex === -1) {
+            updated[newPart.blockId] = [...updated[newPart.blockId], newPart]
+            // Sort parts by index
+            updated[newPart.blockId].sort((a, b) => {
+              const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
+              const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
+              return indexA - indexB
+            })
+          }
+          return updated
+        })
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'BlockPart',
+        filter: `blockId=in.(${data.map(block => block.id).join(',')})`
+      }, (payload) => {
+        const updatedPart = payload.new as BlockPart
+        setBlockParts(prev => {
+          const updated = { ...prev }
+          Object.keys(updated).forEach(blockId => {
+            const partIndex = updated[blockId].findIndex(part => part.id === updatedPart.id)
+            if (partIndex !== -1) {
+              updated[blockId][partIndex] = updatedPart
+              // Re-sort parts by index
+              updated[blockId].sort((a, b) => {
+                const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
+                const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
+                return indexA - indexB
+              })
+            }
+          })
+          return updated
+        })
+
+        // Clear dirty state if this update came from another user
+        setDirtyRows(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(updatedPart.id)
+          return newSet
+        })
+
+        // Clear editing data for this row
+        setEditingData(prev => {
+          const newData = { ...prev }
+          delete newData[updatedPart.id]
+          return newData
+        })
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'BlockPart',
+        filter: `blockId=in.(${data.map(block => block.id).join(',')})`
+      }, (payload) => {
+        const deletedPart = payload.old as BlockPart
+        setBlockParts(prev => {
+          const updated = { ...prev }
+          Object.keys(updated).forEach(blockId => {
+            updated[blockId] = updated[blockId].filter(part => part.id !== deletedPart.id)
+          })
+          return updated
+        })
+
+        // Clear any editing state for the deleted part
+        setDirtyRows(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(deletedPart.id)
+          return newSet
+        })
+
+        setEditingData(prev => {
+          const newData = { ...prev }
+          delete newData[deletedPart.id]
+          return newData
+        })
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(blockPartsChannel)
+    }
+  }, [projectId, data, user, isAnonymousMode])
 
   // Calculate addresses and group blocks by memory bank
   const blocksWithAddresses = useMemo(() => {
@@ -214,6 +497,668 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     return blocksByBank[currentBank] || []
   }, [blocksByBank, currentBank])
 
+  // Convert blocks and parts to unified grid rows
+  const convertToGridRows = useCallback((blocks: BlockWithAddresses[]): GridRow[] => {
+    const rows: GridRow[] = []
+
+    blocks.forEach(block => {
+      // Add block row
+      const blockRow: BlockGridRow = {
+        id: block.id,
+        rowType: 'block',
+        level: 0,
+        isExpanded: expandedBlocks.has(block.id),
+        isDirty: dirtyRows.has(block.id),
+        name: block.name,
+        startAddress: block.startAddress,
+        endAddress: block.endAddress,
+        movable: block.movable,
+        group: block.group,
+        scene: block.scene,
+        postProcess: block.postProcess,
+        meta: block.meta,
+        projectId: block.projectId,
+        createdAt: block.createdAt,
+        createdBy: block.createdBy,
+        updatedAt: block.updatedAt,
+        updatedBy: block.updatedBy,
+        deletedAt: block.deletedAt,
+        deletedBy: block.deletedBy
+      }
+      rows.push(blockRow)
+
+      // Add part rows if block is expanded
+      if (expandedBlocks.has(block.id)) {
+        const parts = blockParts[block.id] || []
+        parts.forEach(part => {
+          // Calculate end value from location + size
+          const calculatedEnd = part.location + part.size
+
+          const partRow: PartGridRow = {
+            id: part.id,
+            rowType: 'part',
+            level: 1,
+            parentId: block.id,
+            blockId: part.blockId,
+            isDirty: dirtyRows.has(part.id),
+            name: part.name,
+            location: part.location,
+            size: part.size,
+            end: calculatedEnd,
+            type: part.type,
+            index: part.index,
+            createdAt: part.createdAt,
+            createdBy: part.createdBy,
+            updatedAt: part.updatedAt,
+            updatedBy: part.updatedBy,
+            deletedAt: part.deletedAt,
+            deletedBy: part.deletedBy
+          }
+          rows.push(partRow)
+        })
+      }
+    })
+
+    return rows
+  }, [blockParts, expandedBlocks, dirtyRows])
+
+  // Inline editing functions
+  const startCellEdit = useCallback((rowId: string, fieldKey: string, currentValue: any) => {
+    const cellKey = `${rowId}:${fieldKey}`
+    setEditingCells(prev => new Set([...prev, cellKey]))
+
+    // Store original value if not already stored
+    if (!originalData[rowId]) {
+      const currentRow = convertToGridRows(currentBankBlocks).find(row => row.id === rowId)
+      if (currentRow) {
+        setOriginalData(prev => ({ ...prev, [rowId]: currentRow }))
+      }
+    }
+
+    // Initialize editing data with current value
+    setEditingData(prev => ({
+      ...prev,
+      [rowId]: { ...prev[rowId], [fieldKey]: currentValue }
+    }))
+  }, [convertToGridRows, currentBankBlocks, originalData])
+
+  const stopCellEdit = useCallback((rowId: string, fieldKey: string) => {
+    const cellKey = `${rowId}:${fieldKey}`
+    setEditingCells(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(cellKey)
+      return newSet
+    })
+  }, [])
+
+  const updateCellValue = useCallback((rowId: string, fieldKey: string, value: any) => {
+    setEditingData(prev => ({
+      ...prev,
+      [rowId]: { ...prev[rowId], [fieldKey]: value }
+    }))
+
+    // Mark row as dirty
+    setDirtyRows(prev => new Set([...prev, rowId]))
+
+    // Clear validation error for this field
+    const errorKey = `${rowId}:${fieldKey}`
+    setValidationErrors(prev => {
+      const newErrors = { ...prev }
+      delete newErrors[errorKey]
+      return newErrors
+    })
+  }, [])
+
+  // Row state management functions
+  const validateRow = useCallback((rowId: string): boolean => {
+    const rowData = editingData[rowId]
+    if (!rowData) return true
+
+    const errors: Record<string, string> = {}
+    const gridRows = convertToGridRows(currentBankBlocks)
+    const row = gridRows.find(r => r.id === rowId)
+    if (!row) return false
+
+    // Validate each field that has been edited
+    Object.keys(rowData).forEach(fieldKey => {
+      const field = editableFields.find(f => f.key === fieldKey && f.rowTypes.includes(row.rowType))
+      if (field && field.validate) {
+        const error = field.validate(rowData[fieldKey])
+        if (error) {
+          errors[`${rowId}:${fieldKey}`] = error
+        }
+      }
+    })
+
+    setValidationErrors(prev => ({ ...prev, ...errors }))
+    return Object.keys(errors).length === 0
+  }, [editingData, convertToGridRows, currentBankBlocks, editableFields])
+
+  const saveRow = useCallback(async (rowId: string) => {
+    if (!user?.id || !validateRow(rowId)) {
+      return false
+    }
+
+    const rowData = editingData[rowId]
+    if (!rowData) return true
+
+    const gridRows = convertToGridRows(currentBankBlocks)
+    const row = gridRows.find(r => r.id === rowId)
+    if (!row) return false
+
+    // Set saving state
+    setSavingRows(prev => new Set([...prev, rowId]))
+
+    try {
+      if (row.rowType === 'block') {
+        // Update block - only include fields that were actually edited
+        const updates: Record<string, any> = {}
+        if ('name' in rowData) updates.name = rowData.name
+        if ('movable' in rowData) updates.movable = rowData.movable
+        if ('group' in rowData) updates.group = rowData.group
+        if ('scene' in rowData) updates.scene = rowData.scene
+        if ('postProcess' in rowData) updates.postProcess = rowData.postProcess
+
+        const { error } = await db.blocks.update(rowId, updates, user.id)
+        if (error) throw new Error(error.message)
+
+      } else if (row.rowType === 'part') {
+        const isNewPart = rowId.startsWith('temp-')
+
+        if (isNewPart) {
+          // Create new part in database
+          const partData = {
+            name: rowData.name?.trim() || '',
+            location: rowData.location ?? 0,
+            size: rowData.size ?? 0,
+            type: rowData.type?.trim() || '',
+            index: rowData.index || null,
+            blockId: (row as PartGridRow).blockId
+          }
+
+          const { data, error } = await db.blockParts.create(partData, user.id)
+          if (error) throw new Error(error.message)
+
+          if (data) {
+            // Replace temporary part with real part in local state
+            setBlockParts(prev => {
+              const updated = { ...prev }
+              const blockId = (row as PartGridRow).blockId
+              if (updated[blockId]) {
+                const tempIndex = updated[blockId].findIndex(part => part.id === rowId)
+                if (tempIndex !== -1) {
+                  updated[blockId][tempIndex] = data
+                  // Re-sort parts by index
+                  updated[blockId].sort((a, b) => {
+                    const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
+                    const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
+                    return indexA - indexB
+                  })
+                }
+              }
+              return updated
+            })
+          }
+        } else {
+          // Update existing part - only include fields that were actually edited
+          const updates: Record<string, any> = {}
+          if ('name' in rowData) updates.name = rowData.name
+          if ('location' in rowData) updates.location = rowData.location
+          if ('size' in rowData) updates.size = rowData.size
+          if ('type' in rowData) updates.type = rowData.type
+          if ('index' in rowData) updates.index = rowData.index
+
+          const { error } = await db.blockParts.update(rowId, updates, user.id)
+          if (error) throw new Error(error.message)
+
+          // Update local blockParts state
+          setBlockParts(prev => {
+            const updated = { ...prev }
+            Object.keys(updated).forEach(blockId => {
+              const partIndex = updated[blockId].findIndex(part => part.id === rowId)
+              if (partIndex !== -1) {
+                updated[blockId][partIndex] = { ...updated[blockId][partIndex], ...updates }
+                // Re-sort parts by index
+                updated[blockId].sort((a, b) => {
+                  const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
+                  const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
+                  return indexA - indexB
+                })
+              }
+            })
+            return updated
+          })
+        }
+      }
+
+      // Clear dirty state and editing data
+      setDirtyRows(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(rowId)
+        return newSet
+      })
+
+      setEditingData(prev => {
+        const newData = { ...prev }
+        delete newData[rowId]
+        return newData
+      })
+
+      setOriginalData(prev => {
+        const newData = { ...prev }
+        delete newData[rowId]
+        return newData
+      })
+
+      // Clear any validation errors for this row
+      setValidationErrors(prev => {
+        const newErrors = { ...prev }
+        Object.keys(newErrors).forEach(key => {
+          if (key.startsWith(`${rowId}:`)) {
+            delete newErrors[key]
+          }
+        })
+        return newErrors
+      })
+
+      return true
+    } catch (err) {
+      console.error('Error saving row:', err)
+      const errorKey = `${rowId}:name` // Show error on name field
+      setValidationErrors(prev => ({
+        ...prev,
+        [errorKey]: err instanceof Error ? err.message : 'Failed to save changes'
+      }))
+      return false
+    } finally {
+      // Clear saving state
+      setSavingRows(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(rowId)
+        return newSet
+      })
+    }
+  }, [user?.id, validateRow, editingData, convertToGridRows, currentBankBlocks])
+
+  const cancelRow = useCallback((rowId: string) => {
+    const isNewPart = rowId.startsWith('temp-')
+
+    if (isNewPart) {
+      // Remove temporary part from local state
+      setBlockParts(prev => {
+        const updated = { ...prev }
+        Object.keys(updated).forEach(blockId => {
+          updated[blockId] = updated[blockId].filter(part => part.id !== rowId)
+        })
+        return updated
+      })
+    }
+
+    // Revert to original values
+    setDirtyRows(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(rowId)
+      return newSet
+    })
+
+    setEditingData(prev => {
+      const newData = { ...prev }
+      delete newData[rowId]
+      return newData
+    })
+
+    setOriginalData(prev => {
+      const newData = { ...prev }
+      delete newData[rowId]
+      return newData
+    })
+
+    // Clear any validation errors for this row
+    setValidationErrors(prev => {
+      const newErrors = { ...prev }
+      Object.keys(newErrors).forEach(key => {
+        if (key.startsWith(`${rowId}:`)) {
+          delete newErrors[key]
+        }
+      })
+      return newErrors
+    })
+
+    // Clear any editing cells for this row
+    setEditingCells(prev => {
+      const newSet = new Set(prev)
+      Array.from(newSet).forEach(cellKey => {
+        if (cellKey.startsWith(`${rowId}:`)) {
+          newSet.delete(cellKey)
+        }
+      })
+      return newSet
+    })
+  }, [])
+
+  // Keyboard navigation
+  const getEditableCells = useCallback((): string[] => {
+    const gridRows = convertToGridRows(currentBankBlocks)
+    const cells: string[] = []
+
+    gridRows.forEach(row => {
+      editableFields.forEach(field => {
+        if (field.rowTypes.includes(row.rowType)) {
+          cells.push(`${row.id}:${field.key}`)
+        }
+      })
+    })
+
+    return cells
+  }, [convertToGridRows, currentBankBlocks, editableFields])
+
+  const navigateToCell = useCallback((direction: 'next' | 'prev', currentCellKey: string) => {
+    const cells = getEditableCells()
+    const currentIndex = cells.indexOf(currentCellKey)
+
+    if (currentIndex === -1) return
+
+    let nextIndex: number
+    if (direction === 'next') {
+      nextIndex = currentIndex + 1 >= cells.length ? 0 : currentIndex + 1
+    } else {
+      nextIndex = currentIndex - 1 < 0 ? cells.length - 1 : currentIndex - 1
+    }
+
+    const nextCellKey = cells[nextIndex]
+    const [rowId, fieldKey] = nextCellKey.split(':')
+
+    // Focus the next cell
+    const cellElement = document.querySelector(`[data-cell-key="${nextCellKey}"]`) as HTMLElement
+    if (cellElement) {
+      cellElement.focus()
+
+      // If it's not already in edit mode, start editing
+      if (!editingCells.has(nextCellKey)) {
+        const gridRows = convertToGridRows(currentBankBlocks)
+        const row = gridRows.find(r => r.id === rowId)
+        if (row) {
+          const currentValue = (row as any)[fieldKey]
+          startCellEdit(rowId, fieldKey, currentValue)
+        }
+      }
+    }
+  }, [getEditableCells, editingCells, convertToGridRows, currentBankBlocks, startCellEdit])
+
+  const handleCellKeyDown = useCallback((event: React.KeyboardEvent, rowId: string, fieldKey: string) => {
+    const cellKey = `${rowId}:${fieldKey}`
+
+    switch (event.key) {
+      case 'Tab':
+        event.preventDefault()
+        navigateToCell(event.shiftKey ? 'prev' : 'next', cellKey)
+        break
+
+      case 'Enter':
+        event.preventDefault()
+        // Stop editing this cell and move to next
+        stopCellEdit(rowId, fieldKey)
+        navigateToCell('next', cellKey)
+        break
+
+      case 'Escape':
+        event.preventDefault()
+        // Cancel editing and revert value
+        stopCellEdit(rowId, fieldKey)
+        // Revert the specific field value
+        setEditingData(prev => {
+          const newData = { ...prev }
+          if (newData[rowId]) {
+            const { [fieldKey]: removed, ...rest } = newData[rowId]
+            newData[rowId] = rest
+            if (Object.keys(rest).length === 0) {
+              delete newData[rowId]
+            }
+          }
+          return newData
+        })
+        break
+    }
+  }, [navigateToCell, stopCellEdit])
+
+  // Cell rendering functions
+  const renderEditableCell = useCallback((row: GridRow, field: EditableField) => {
+    const cellKey = `${row.id}:${field.key}`
+    const isEditing = editingCells.has(cellKey)
+    const currentValue = editingData[row.id]?.[field.key] ?? (row as any)[field.key]
+    const error = validationErrors[cellKey]
+
+    const handleClick = () => {
+      if (!isEditing) {
+        startCellEdit(row.id, field.key, currentValue)
+      }
+    }
+
+    const handleBlur = () => {
+      stopCellEdit(row.id, field.key)
+
+      // For part rows, calculate dependent fields when location, size, or end changes
+      if (row.rowType === 'part') {
+        const currentData = editingData[row.id] || {}
+        const location = currentData.location ?? (row as PartGridRow).location
+        const size = currentData.size ?? (row as PartGridRow).size
+        const end = currentData.end ?? (location + size)
+
+        // When size changes, recalculate end = location + size
+        if (field.key === 'size' && typeof size === 'number' && typeof location === 'number') {
+          const calculatedEnd = location + size
+          setEditingData(prev => ({
+            ...prev,
+            [row.id]: {
+              ...prev[row.id],
+              end: calculatedEnd
+            }
+          }))
+
+          // Mark row as dirty if not already
+          if (!dirtyRows.has(row.id)) {
+            setDirtyRows(prev => new Set([...prev, row.id]))
+          }
+        }
+
+        // When end changes, recalculate size = end - location
+        if (field.key === 'end' && typeof end === 'number' && typeof location === 'number') {
+          const calculatedSize = end - location
+          if (calculatedSize >= 0) {
+            setEditingData(prev => ({
+              ...prev,
+              [row.id]: {
+                ...prev[row.id],
+                size: calculatedSize
+              }
+            }))
+
+            // Mark row as dirty if not already
+            if (!dirtyRows.has(row.id)) {
+              setDirtyRows(prev => new Set([...prev, row.id]))
+            }
+          }
+        }
+
+        // When location changes, recalculate end = location + size
+        if (field.key === 'location' && typeof location === 'number' && typeof size === 'number') {
+          const calculatedEnd = location + size
+          setEditingData(prev => ({
+            ...prev,
+            [row.id]: {
+              ...prev[row.id],
+              end: calculatedEnd
+            }
+          }))
+
+          // Mark row as dirty if not already
+          if (!dirtyRows.has(row.id)) {
+            setDirtyRows(prev => new Set([...prev, row.id]))
+          }
+        }
+      }
+    }
+
+    const handleChange = (value: any) => {
+      updateCellValue(row.id, field.key, value)
+    }
+
+    if (isEditing) {
+      return (
+        <div className="relative">
+          {field.type === 'text' && (
+            <input
+              type="text"
+              value={currentValue || ''}
+              onChange={(e) => handleChange(e.target.value)}
+              onBlur={handleBlur}
+              onKeyDown={(e) => handleCellKeyDown(e, row.id, field.key)}
+              className={clsx(
+                'w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2',
+                error
+                  ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                  : 'border-blue-300 focus:border-blue-500 focus:ring-blue-500',
+                field.key === 'location' || field.key === 'size' ? 'font-mono' : ''
+              )}
+              placeholder={field.placeholder}
+              autoFocus
+              data-cell-key={cellKey}
+            />
+          )}
+
+          {field.type === 'hex' && (
+            <input
+              type="text"
+              value={typeof currentValue === 'number'
+                ? currentValue.toString(16).toUpperCase().padStart(4, '0')
+                : currentValue || ''}
+              onChange={(e) => {
+                const hexValue = e.target.value.replace(/^0x/i, '')
+                if (/^[0-9A-Fa-f]*$/.test(hexValue) && hexValue !== '') {
+                  handleChange(parseInt(hexValue, 16))
+                } else if (hexValue === '') {
+                  handleChange(null)
+                } else {
+                  handleChange(e.target.value) // Keep invalid input for validation
+                }
+              }}
+              onBlur={handleBlur}
+              onKeyDown={(e) => handleCellKeyDown(e, row.id, field.key)}
+              className={clsx(
+                'w-full px-2 py-1 text-sm box-border border rounded focus:outline-none focus:ring-2 font-mono',
+                error
+                  ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                  : 'border-blue-300 focus:border-blue-500 focus:ring-blue-500'
+              )}
+              placeholder={field.placeholder}
+              autoFocus
+              data-cell-key={cellKey}
+            />
+          )}
+
+          {field.type === 'number' && (
+            <input
+              type="number"
+              value={currentValue ?? ''}
+              onChange={(e) => handleChange(e.target.value ? Number(e.target.value) : null)}
+              onBlur={handleBlur}
+              onKeyDown={(e) => handleCellKeyDown(e, row.id, field.key)}
+              className={clsx(
+                'w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2',
+                error
+                  ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                  : 'border-blue-300 focus:border-blue-500 focus:ring-blue-500'
+              )}
+              min={0}
+              autoFocus
+              data-cell-key={cellKey}
+            />
+          )}
+
+          {field.type === 'boolean' && (
+            <select
+              value={currentValue ? 'true' : 'false'}
+              onChange={(e) => handleChange(e.target.value === 'true')}
+              onBlur={handleBlur}
+              onKeyDown={(e) => handleCellKeyDown(e, row.id, field.key)}
+              className={clsx(
+                'w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2',
+                error
+                  ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                  : 'border-blue-300 focus:border-blue-500 focus:ring-blue-500'
+              )}
+              autoFocus
+              data-cell-key={cellKey}
+            >
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          )}
+
+          {field.type === 'select' && (
+            <select
+              value={currentValue || ''}
+              onChange={(e) => handleChange(e.target.value)}
+              onBlur={handleBlur}
+              onKeyDown={(e) => handleCellKeyDown(e, row.id, field.key)}
+              className={clsx(
+                'w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2',
+                error
+                  ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                  : 'border-blue-300 focus:border-blue-500 focus:ring-blue-500'
+              )}
+              autoFocus
+              data-cell-key={cellKey}
+            >
+              <option value="">Select...</option>
+              {field.options?.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {error && (
+            <div className="absolute top-full left-0 z-10 mt-1 text-xs text-red-600 bg-white border border-red-300 rounded px-2 py-1 shadow-lg">
+              {error}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Display mode
+    const displayValue = (() => {
+      if (currentValue === null || currentValue === undefined) return '—'
+
+      if (field.type === 'hex' && typeof currentValue === 'number') {
+        return (currentValue & 0xFFFF).toString(16).toUpperCase().padStart(4, '0')
+      }
+
+      if (field.type === 'boolean') {
+        return currentValue ? '✓' : '✗'
+      }
+
+      return String(currentValue)
+    })()
+
+    return (
+      <div
+        onClick={handleClick}
+        className={clsx(
+          'cursor-pointer hover:bg-gray-50 rounded',
+          (field.key === 'location' || field.key === 'size' || field.key === 'end') ? 'font-mono' : '',
+          error && 'bg-red-50'
+        )}
+        data-cell-key={cellKey}
+        tabIndex={0}
+      >
+        {displayValue}
+      </div>
+    )
+  }, [editingCells, editingData, validationErrors, startCellEdit, stopCellEdit, updateCellValue, handleCellKeyDown])
+
   const handlePreviousBank = useCallback(() => {
     const currentIndex = availableBanks.indexOf(currentBank)
     if (currentIndex > 0) {
@@ -244,28 +1189,79 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     })
   }
 
-  const handleCancelAddPart = (blockId: string) => {
-    setAddPartFormData(prev => ({ ...prev, [blockId]: {} }))
-    setPartValidationErrors(prev => ({ ...prev, [blockId]: {} }))
-  }
 
-  const handleEditPart = (part: BlockPart) => {
-    setEditingPartId(part.id)
-    setEditPartFormData({
-      name: part.name,
-      location: part.location,
-      size: part.size,
-      type: part.type,
-      index: part.index
+
+  const handleAddPart = (block: BlockWithAddresses) => {
+    if (!user?.id) {
+      console.error('User not authenticated')
+      return
+    }
+
+    // Calculate next location based on existing parts
+    const existingParts = blockParts[block.id] || []
+    const nextLocation = existingParts.length > 0
+      ? Math.max(...existingParts.map(p => p.location + p.size))
+      : 0
+
+    // Generate a temporary ID for the new part
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+
+    // Create new part as a temporary object
+    const newPart: BlockPart = {
+      id: tempId,
+      name: '',
+      location: nextLocation,
+      size: 0,
+      type: 'Code',
+      index: null,
+      blockId: block.id,
+      createdAt: new Date(),
+      createdBy: user.id,
+      updatedAt: null,
+      updatedBy: null,
+      deletedAt: null,
+      deletedBy: null
+    }
+
+    // Add to local state without persisting to database
+    setBlockParts(prev => {
+      const updated = { ...prev }
+      if (!updated[block.id]) {
+        updated[block.id] = []
+      }
+      updated[block.id] = [...updated[block.id], newPart]
+
+      // Sort parts by index
+      updated[block.id].sort((a, b) => {
+        const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
+        const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
+        return indexA - indexB
+      })
+
+      return updated
     })
-    setEditPartValidationErrors({})
+
+    // Mark the new part as dirty
+    setDirtyRows(prev => new Set([...prev, tempId]))
+
+    // Initialize editing data with default values (including calculated end)
+    setEditingData(prev => ({
+      ...prev,
+      [tempId]: {
+        name: '',
+        location: nextLocation,
+        size: 0,
+        end: nextLocation + 0, // Calculated: location + size
+        type: 'Code',
+        index: null
+      }
+    }))
+
+    // Expand the block to show the new part
+    setExpandedBlocks(prev => new Set([...prev, block.id]))
   }
 
-  const handleCancelEditPart = () => {
-    setEditingPartId(null)
-    setEditPartFormData({})
-    setEditPartValidationErrors({})
-  }
+
 
   const handleDeletePart = async (partId: string, blockId: string) => {
     if (!user?.id) return
@@ -293,320 +1289,6 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       console.error('Error deleting part:', err)
       alert('Failed to delete part. Please try again.')
     }
-  }
-
-  const validatePartForm = (blockId: string): boolean => {
-    const formData = addPartFormData[blockId] || {}
-    const errors: Record<string, string> = {}
-
-    // Name validation
-    if (!formData.name?.trim()) {
-      errors.name = 'Name is required'
-    }
-
-    // Location validation (hex)
-    if (formData.location === undefined || formData.location === null) {
-      errors.location = 'Location is required'
-    }
-
-    // Size validation
-    if (!formData.size || formData.size <= 0) {
-      errors.size = 'Size must be a positive number'
-    }
-
-    // Type validation
-    if (!formData.type?.trim()) {
-      errors.type = 'Type is required'
-    }
-
-    // Index validation (optional)
-    if (formData.index !== undefined && formData.index !== null && formData.index < 0) {
-      errors.index = 'Index must be non-negative'
-    }
-
-    setPartValidationErrors(prev => ({ ...prev, [blockId]: errors }))
-    return Object.keys(errors).length === 0
-  }
-
-  const validateEditPartForm = (): boolean => {
-    const formData = editPartFormData
-    const errors: Record<string, string> = {}
-
-    // Name validation
-    if (!formData.name?.trim()) {
-      errors.name = 'Name is required'
-    }
-
-    // Location validation (hex)
-    if (formData.location === undefined || formData.location === null) {
-      errors.location = 'Location is required'
-    }
-
-    // Size validation
-    if (!formData.size || formData.size <= 0) {
-      errors.size = 'Size must be a positive number'
-    }
-
-    // Type validation
-    if (!formData.type?.trim()) {
-      errors.type = 'Type is required'
-    }
-
-    // Index validation (optional)
-    if (formData.index !== undefined && formData.index !== null && formData.index < 0) {
-      errors.index = 'Index must be non-negative'
-    }
-
-    setEditPartValidationErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const handleSaveEditPart = async () => {
-    if (!user?.id || !editingPartId || !validateEditPartForm()) {
-      return
-    }
-
-    try {
-      const updates = {
-        name: editPartFormData.name?.trim() || '',
-        location: editPartFormData.location ?? 0,
-        size: editPartFormData.size ?? 0,
-        type: editPartFormData.type?.trim() || '',
-        index: editPartFormData.index || undefined
-      }
-
-      const { data, error } = await db.blockParts.update(editingPartId, updates, user.id)
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      if (data) {
-        // Update local state
-        setBlockParts(prev => {
-          const updated = { ...prev }
-          Object.keys(updated).forEach(blockId => {
-            const partIndex = updated[blockId].findIndex(part => part.id === editingPartId)
-            if (partIndex !== -1) {
-              updated[blockId][partIndex] = data
-              // Re-sort parts by index
-              updated[blockId].sort((a, b) => {
-                const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-                const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-                return indexA - indexB
-              })
-            }
-          })
-          return updated
-        })
-
-        // Reset edit state
-        handleCancelEditPart()
-      }
-    } catch (err) {
-      console.error('Error updating part:', err)
-      setEditPartValidationErrors({ name: 'Failed to update part. Please try again.' })
-    }
-  }
-
-  const handleSaveAddPart = async (blockId: string) => {
-    if (!user?.id || !validatePartForm(blockId)) {
-      return
-    }
-
-    const formData = addPartFormData[blockId]
-    if (!formData) return
-
-    try {
-      const partData = {
-        name: formData.name?.trim() || '',
-        location: formData.location ?? 0,
-        size: formData.size ?? 0,
-        type: formData.type?.trim() || '',
-        index: formData.index || undefined,
-        blockId
-      }
-
-      const { data, error } = await db.blockParts.create(partData, user.id)
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      if (data) {
-        // Update local state
-        setBlockParts(prev => {
-          const updated = { ...prev }
-          if (!updated[blockId]) {
-            updated[blockId] = []
-          }
-          updated[blockId] = [...updated[blockId], data]
-
-          // Sort parts by index
-          updated[blockId].sort((a, b) => {
-            const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-            const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-            return indexA - indexB
-          })
-
-          return updated
-        })
-
-        // Reset form
-        handleCancelAddPart(blockId)
-      }
-    } catch (err) {
-      console.error('Error adding part:', err)
-      setPartValidationErrors(prev => ({
-        ...prev,
-        [blockId]: { name: 'Failed to add part. Please try again.' }
-      }))
-    }
-  }
-
-  const renderPartEditableCell = (
-    blockId: string,
-    field: keyof BlockPart,
-    type: 'text' | 'number' | 'hex' = 'text'
-  ) => {
-    const formData = addPartFormData[blockId] || {}
-    const errors = partValidationErrors[blockId] || {}
-    let value = (formData as any)[field] || ''
-
-    // Handle hex display for location and size
-    if ((field === 'location' || field === 'size') && typeof value === 'number') {
-      value = `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
-    }
-
-    const error = errors[field]
-
-    const handleChange = (newValue: string) => {
-      let processedValue: any = newValue
-
-      // Handle hex input for location and size
-      if (field === 'location' || field === 'size') {
-        const hexValue = newValue.replace(/^0x/i, '')
-        if (/^[0-9A-Fa-f]*$/.test(hexValue) && hexValue !== '') {
-          processedValue = parseInt(hexValue, 16)
-        } else if (hexValue === '') {
-          processedValue = null
-        } else {
-          processedValue = newValue // Keep invalid input for validation
-        }
-      } else if (type === 'number') {
-        processedValue = newValue ? Number(newValue) : null
-      }
-
-      setAddPartFormData(prev => ({
-        ...prev,
-        [blockId]: { ...prev[blockId], [field]: processedValue }
-      }))
-
-      // Clear validation error when user starts typing
-      if (error) {
-        setPartValidationErrors(prev => {
-          const newErrors = { ...prev }
-          if (newErrors[blockId]) {
-            const blockErrors = { ...newErrors[blockId] }
-            delete blockErrors[field]
-            newErrors[blockId] = blockErrors
-          }
-          return newErrors
-        })
-      }
-    }
-
-    const baseClasses = clsx(
-      'w-full px-2 py-1 text-sm border rounded',
-      error
-        ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
-        : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-    )
-
-    return (
-      <div>
-        <input
-          type={type === 'number' ? 'number' : 'text'}
-          value={value}
-          onChange={(e) => handleChange(e.target.value)}
-          className={clsx(baseClasses, (field === 'location' || field === 'size') && 'font-mono')}
-          placeholder={
-            field === 'name' ? 'Part name' :
-            field === 'location' ? '0x1000' :
-            field === 'size' ? '0x0020' :
-            field === 'type' ? 'e.g., code, data' :
-            field === 'index' ? 'Order' : ''
-          }
-          min={type === 'number' ? 0 : undefined}
-        />
-        {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
-      </div>
-    )
-  }
-
-  const renderEditPartEditableCell = (
-    field: keyof BlockPart,
-    type: 'text' | 'number' | 'hex' = 'text'
-  ) => {
-    const formData = editPartFormData
-    const errors = editPartValidationErrors
-    let value = (formData as any)[field] || ''
-
-    // Handle hex display for location and size
-    if ((field === 'location' || field === 'size') && typeof value === 'number') {
-      value = `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
-    }
-
-    const error = errors[field]
-
-    const handleChange = (newValue: string) => {
-      let processedValue: any = newValue
-
-      // Handle hex input for location and size
-      if (field === 'location' || field === 'size') {
-        const hexValue = newValue.replace(/^0x/i, '')
-        if (/^[0-9A-Fa-f]*$/.test(hexValue) && hexValue !== '') {
-          processedValue = parseInt(hexValue, 16)
-        } else if (hexValue === '') {
-          processedValue = null
-        } else {
-          processedValue = newValue // Keep invalid input for validation
-        }
-      } else if (type === 'number') {
-        processedValue = newValue ? Number(newValue) : null
-      }
-
-      setEditPartFormData(prev => ({ ...prev, [field]: processedValue }))
-
-      // Clear validation error when user starts typing
-      if (error) {
-        setEditPartValidationErrors(prev => {
-          const newErrors = { ...prev }
-          delete newErrors[field]
-          return newErrors
-        })
-      }
-    }
-
-    const baseClasses = clsx(
-      'w-full px-2 py-1 text-sm border rounded',
-      error
-        ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
-        : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-    )
-
-    return (
-      <div>
-        <input
-          type={type === 'number' ? 'number' : 'text'}
-          value={value}
-          onChange={(e) => handleChange(e.target.value)}
-          className={clsx(baseClasses, (field === 'location' || field === 'size') && 'font-mono')}
-          min={type === 'number' ? 0 : undefined}
-        />
-        {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
-      </div>
-    )
   }
 
   // Keyboard navigation
@@ -872,8 +1554,205 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
         </div>
       </div>
 
-      {/* Data Table with Hierarchical Display */}
-      <DataTable
+      {/* Enhanced Data Grid with Inline Editing */}
+      <div className="bg-white shadow-sm rounded-lg border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                  {/* Expand/Collapse */}
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Start
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  End
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Move<br/>Size
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Path<br/>Type
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Process<br/>Order
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {convertToGridRows(currentBankBlocks).map((row, index) => {
+                const isDirty = dirtyRows.has(row.id)
+                const isSaving = savingRows.has(row.id)
+                const isBlock = row.rowType === 'block'
+                const isPart = row.rowType === 'part'
+
+                return (
+                  <tr
+                    key={row.id}
+                    className={clsx(
+                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50',
+                      isDirty && 'bg-yellow-50 border-l-4 border-yellow-400',
+                      isPart && 'bg-blue-50/30'
+                    )}
+                  >
+                    {/* Expand/Collapse Column */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {isBlock && (
+                        <button
+                          onClick={() => toggleBlockExpansion(row.id)}
+                          className="p-1 hover:bg-gray-100 rounded"
+                          title={expandedBlocks.has(row.id) ? 'Collapse' : 'Expand'}
+                        >
+                          {expandedBlocks.has(row.id) ? (
+                            <ChevronDown className="h-4 w-4 text-gray-600" />
+                          ) : (
+                            <ChevronRightIcon className="h-4 w-4 text-gray-600" />
+                          )}
+                        </button>
+                      )}
+                      {isPart && (
+                        <div className="w-6 h-6 flex items-center justify-center">
+                          <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Name Column */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {renderEditableCell(row, editableFields.find(f => f.key === 'name')!)}
+                    </td>
+
+                    {/* Start Address Column */}
+                    <td className="px-3 py-2 whitespace-nowrap font-mono text-sm text-right">
+                      {isBlock && row.startAddress !== undefined ? (
+                        row.startAddress.toString(16).toUpperCase().padStart(6, '0')
+                      ) : isPart ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'location')!)
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+
+                    {/* End Address Column */}
+                    <td className="px-3 py-2 whitespace-nowrap font-mono text-sm text-right">
+                      {isBlock && row.endAddress !== undefined ? (
+                        row.endAddress.toString(16).toUpperCase().padStart(6, '0')
+                      ) : isPart ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'end')!)
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+
+                    {/* Size/Movable Column */}
+                    <td className="px-3 py-2 whitespace-nowrap font-mono text-sm">
+                      {isBlock ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'movable')!)
+                      ) : isPart ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'size')!)
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+
+                    {/* Group/Type Column */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {isBlock ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'group')!)
+                      ) : isPart ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'type')!)
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+
+                    {/* Scene/Order Column */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {isBlock ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'postProcess')!)
+                      ) : isPart ? (
+                        renderEditableCell(row, editableFields.find(f => f.key === 'index')!)
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+
+                    {/* Actions Column */}
+                    <td className="px-3 py-2 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        {isDirty && (
+                          <>
+                            <button
+                              onClick={() => saveRow(row.id)}
+                              disabled={isSaving}
+                              className={clsx(
+                                "text-green-600 hover:text-green-900",
+                                isSaving && "opacity-50 cursor-not-allowed"
+                              )}
+                              title={isSaving ? "Saving..." : "Save Changes"}
+                            >
+                              <Check className={clsx("h-4 w-4", isSaving && "animate-pulse")} />
+                            </button>
+                            <button
+                              onClick={() => cancelRow(row.id)}
+                              disabled={isSaving}
+                              className={clsx(
+                                "text-gray-600 hover:text-gray-900",
+                                isSaving && "opacity-50 cursor-not-allowed"
+                              )}
+                              title="Cancel Changes"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+
+                        {isBlock && (
+                          <button
+                            onClick={() => handleAddPart(row as BlockWithAddresses)}
+                            className="text-green-600 hover:text-green-900"
+                            title="Add Part"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        {isPart && (
+                          <button
+                            onClick={() => handleDeletePart(row.id, (row as PartGridRow).blockId)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete Part"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        {isBlock && (
+                          <button
+                            onClick={() => handleViewArtifact(row as Block)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="View Artifact"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {/* <DataTable
         {...props}
         data={currentBankBlocks}
         columns={enhancedColumns}
@@ -885,10 +1764,8 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
           const parts = block.parts || []
 
           return (
-            <div className="px-6 py-2 bg-gray-50">
-              <div className="text-sm font-medium text-gray-700 mb-3">Block Parts:</div>
-
-              <div className="overflow-x-auto">
+            <div className="bg-gray-50">
+              <div className="overflow-visible">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-100">
                     <tr>
@@ -902,7 +1779,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {/* Existing Parts */}
+                    {/* Existing Parts *\/}
                     {parts.sort((a, b) => {
                       const orderA = a.index ?? 0;
                       const orderB = b.index ?? 0;
@@ -985,7 +1862,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
                       )
                     })}
 
-                    {/* Always show Add Form Row at the bottom */}
+                    {/* Always show Add Form Row at the bottom *\/}
                     <tr className="bg-blue-50">
                       <td className="px-3 py-2 whitespace-nowrap">
                         {renderPartEditableCell(block.id, 'name', 'text')}
@@ -997,7 +1874,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
                         {renderPartEditableCell(block.id, 'size', 'hex')}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-400">
-                        {/* END address - calculated automatically */}
+                        {/* END address - calculated automatically *\/}
                         —
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
@@ -1031,7 +1908,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
             </div>
           )
         }}
-      />
+      /> */}
 
       {/* ROM File Modal */}
       <RomPathModal
