@@ -14,13 +14,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// FIXED: Standard Supabase client configuration
-// The hanging issue was caused by race conditions in auth state change listeners, not client config
+// FIXED: Single Supabase client configuration with OAuth support
+// Enable detectSessionInUrl for automatic OAuth token processing
+// This is the standard pattern from Supabase documentation
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true, // Enable for OAuth flows (GitHub, etc.)
   },
   realtime: {
     params: {
@@ -29,32 +30,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 })
 
-// Create a fresh Supabase client instance for database operations
-// This works around the hanging bug by creating clean client instances
-export const createFreshSupabaseClient = () => {
-  console.log('Creating fresh Supabase client...')
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: false, // Don't auto-refresh on fresh clients
-      persistSession: false,   // Don't persist session for fresh client
-      detectSessionInUrl: false,
-    },
-    realtime: {
-      params: {
-        eventsPerSecond: 10,
-      },
-    },
-  })
-}
-
-// FIXED: Create a cached working client with direct token authentication
-// Avoid setSession() which can also hang - use direct token approach
-// Cache the client to prevent "Multiple GoTrueClient instances" warning
-let cachedWorkingClient: any = null
-let cachedAccessToken: string | null = null
-
+// Simplified working client - returns appropriate client based on mode
+// No caching to prevent "Multiple GoTrueClient instances" warnings
 export const createWorkingClient = () => {
-  // In anonymous mode, always use the anon key without authentication
+  // In anonymous mode, use separate client without authentication
   if (isAnonymousModeEnabled()) {
     console.log('Creating working client for anonymous mode...')
     return createClient(supabaseUrl, supabaseAnonKey, {
@@ -71,63 +50,15 @@ export const createWorkingClient = () => {
     })
   }
 
-  // Get session token from localStorage directly
-  let accessToken = null
-  try {
-    const authKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
-    const authData = localStorage.getItem(authKey)
-
-    if (authData) {
-      const session = JSON.parse(authData)
-      accessToken = session.access_token
-    }
-  } catch (error) {
-    console.warn('Could not get token from localStorage:', error)
-  }
-
-  // Return cached client if token hasn't changed
-  if (cachedWorkingClient && cachedAccessToken === accessToken) {
-    return cachedWorkingClient
-  }
-
-  console.log('Creating working client with direct token auth...')
-
-  // Create new client with token in headers if available
-  if (accessToken) {
-    cachedWorkingClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false,
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
-      realtime: {
-        params: {
-          eventsPerSecond: 10,
-        },
-      },
-    })
-    cachedAccessToken = accessToken
-    console.log('Found access token in localStorage')
-  } else {
-    // Fallback to fresh client without auth
-    cachedWorkingClient = createFreshSupabaseClient()
-    cachedAccessToken = null
-    console.log('No session found in localStorage')
-  }
-
-  return cachedWorkingClient
+  // For authenticated users, use the main client
+  // This ensures consistent auth state and prevents client conflicts
+  return supabase
 }
 
-// Clear cached working client (useful when user signs out)
+// Clear cached working client (no-op for backward compatibility)
 export const clearWorkingClientCache = () => {
-  console.log('Clearing cached working client')
-  cachedWorkingClient = null
-  cachedAccessToken = null
+  // No-op since we're using single client approach
+  console.log('clearWorkingClientCache called (no-op in single client mode)')
 }
 
 // External API configuration (using HTTP requests instead of Supabase client)

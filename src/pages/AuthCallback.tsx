@@ -13,19 +13,14 @@ export default function AuthCallback() {
     const handleAuthCallback = async () => {
       try {
         console.log('=== AuthCallback: Starting OAuth callback processing ===')
-        console.log('Current URL:', window.location.href)
-        console.log('Pathname:', window.location.pathname)
-        console.log('Search:', window.location.search)
-        console.log('Hash fragment:', window.location.hash)
-        console.log('Current auth state - user:', user, 'session:', !!session)
 
-        // Check if we have auth tokens in the URL hash
+        // Check for OAuth errors in URL (both query params and hash)
+        const urlParams = new URLSearchParams(window.location.search)
         const hashParams = new URLSearchParams(window.location.hash.substring(1))
-        const accessToken = hashParams.get('access_token')
-        const errorParam = hashParams.get('error')
-        const errorDescription = hashParams.get('error_description')
 
-        // Handle OAuth errors
+        const errorParam = urlParams.get('error') || hashParams.get('error')
+        const errorDescription = urlParams.get('error_description') || hashParams.get('error_description')
+
         if (errorParam) {
           console.error('OAuth error:', errorParam, errorDescription)
           setError(`Authentication failed: ${errorDescription || errorParam}`)
@@ -33,57 +28,43 @@ export default function AuthCallback() {
           return
         }
 
-        if (accessToken) {
-          console.log('AuthCallback: Found auth tokens in URL, waiting for Supabase to process...')
+        // Supabase automatically processes tokens due to detectSessionInUrl: true
+        // Just wait for auth state to update via the store
+        console.log('AuthCallback: Waiting for Supabase to process session...')
 
-          // Supabase should automatically process the tokens due to detectSessionInUrl: true
-          // Wait for the auth state to update via the auth store
-          let attempts = 0
-          const maxAttempts = 10 // 5 seconds total
+        let attempts = 0
+        const maxAttempts = 20 // 10 seconds total
 
-          const checkAuthState = async () => {
-            attempts++
-            console.log(`AuthCallback: Checking auth state (attempt ${attempts})`)
+        const checkAuthState = async () => {
+          attempts++
+          console.log(`AuthCallback: Checking auth state (attempt ${attempts})`)
 
-            if (session && user) {
-              console.log('AuthCallback: Authentication successful, syncing user')
-              const { data, error } = await db.users.syncFromAuth(session.user)
-              
-              if (error) {
-                console.error('AuthCallback: Error syncing user to database:', error)
-              } else {
-                console.log('AuthCallback: User synced to database successfully:', data)
-              }
-              navigate('/dashboard')
-              return
-            }
-
-            if (attempts >= maxAttempts) {
-              console.error('AuthCallback: Timeout waiting for authentication')
-              setError('Authentication timeout - please try again')
-              setTimeout(() => navigate('/login?error=auth_timeout'), 2000)
-              return
-            }
-
-            // Check again in 500ms
-            setTimeout(checkAuthState, 500)
-          }
-
-          // Start checking after a brief delay to let Supabase process
-          setTimeout(checkAuthState, 500)
-
-        } else {
-          console.log('AuthCallback: No auth tokens in URL, checking existing session...')
-
-          // No tokens in URL, check if we already have a session
           if (session && user) {
-            console.log('AuthCallback: Existing session found, redirecting to dashboard')
+            console.log('AuthCallback: Authentication successful, syncing user')
+            const { data, error } = await db.users.syncFromAuth(session.user)
+
+            if (error) {
+              console.error('AuthCallback: Error syncing user:', error)
+            } else {
+              console.log('AuthCallback: User synced successfully:', data)
+            }
             navigate('/dashboard')
-          } else {
-            console.log('AuthCallback: No session and no tokens, redirecting to login')
-            navigate('/login')
+            return
           }
+
+          if (attempts >= maxAttempts) {
+            console.error('AuthCallback: Timeout waiting for authentication')
+            setError('Authentication timeout - please try again')
+            setTimeout(() => navigate('/login?error=auth_timeout'), 2000)
+            return
+          }
+
+          setTimeout(checkAuthState, 500)
         }
+
+        // Start checking immediately
+        checkAuthState()
+
       } catch (error) {
         console.error('Auth callback error:', error)
         setError('Authentication failed - please try again')
