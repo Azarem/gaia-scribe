@@ -529,11 +529,11 @@ export class ImportOrchestrator {
         const stringCommandsToInsert = internalData.stringCommands
           .map((command: any) => {
             return {
+              id: createId(),
               ...command,
               createdBy: userId
             }
           })
-          .filter(Boolean) // Remove null entries
 
         if (stringCommandsToInsert.length > 0) {
           const { error: stringCommandsError } = await supabase
