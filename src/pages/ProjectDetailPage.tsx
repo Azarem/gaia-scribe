@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { Calendar, Edit, Trash2, ArrowLeft, Globe, Lock } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 import EditProjectModal from '../components/EditProjectModal'

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth-store'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { ArrowLeft, Home } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 import { getSectionByRoute } from '../lib/project-sections'

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '../stores/auth-store'
 import Modal from './Modal'
 import { Search, Download, Calendar, Eye, Tag } from 'lucide-react'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { createImportOrchestrator, type ImportProgressCallback } from '../lib/import-orchestrator'
 
 import EnhancedPlatformSelector from './EnhancedPlatformSelector'

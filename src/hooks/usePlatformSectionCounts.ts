@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { db, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { useAuthStore } from '../stores/auth-store'
 
 interface PlatformSectionCounts {

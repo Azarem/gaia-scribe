@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../stores/auth-store'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 
 export function usePlatformPermissions(platformId: string | null) {
   const { user } = useAuthStore()

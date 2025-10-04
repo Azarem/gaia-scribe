@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { Calendar, Download, Users as UsersIcon, Eye, TrendingUp, Clock, Star } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 import clsx from 'clsx'

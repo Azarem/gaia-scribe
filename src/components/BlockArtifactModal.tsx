@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Modal from './Modal'
 import { Code, AlertCircle, Loader } from 'lucide-react'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import type { Block, BlockArtifact } from '@prisma/client'
 
 interface BlockArtifactModalProps {

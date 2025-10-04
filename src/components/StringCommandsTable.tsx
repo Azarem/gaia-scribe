@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Check, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { StringCommand } from '@prisma/client'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { useAuthStore } from '../stores/auth-store'
 
 interface StringCommandsTableProps {

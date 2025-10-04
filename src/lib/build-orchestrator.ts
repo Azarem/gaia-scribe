@@ -12,7 +12,7 @@
 import { BlockReader, BlockWriter } from '@gaialabs/core'
 import { BinType, CompressionRegistry, CopDef, DbBlock, DbFile, DbOverride, DbStringType, DbStruct, MemberType, RomProcessingConstants } from '@gaialabs/shared'
 import { type DbRoot, OpCode } from '@gaialabs/shared'
-import { db } from './supabase'
+import { db } from '../services/supabase'
 import { useAuthStore } from '../stores/auth-store'
 import type { ScribeProject, Block, BlockPart, Cop, File as PrismaFile, Label, GameMnemonic, Override, Rewrite, StringType, AddressingMode, InstructionGroup, InstructionCode, Struct, StringCommand } from '@prisma/client'
 
@@ -218,9 +218,9 @@ export class BuildOrchestrator {
     if (partsError) throw new Error(`Failed to load parts: ${partsError.message}`)
 
     // Combine blocks and parts
-    const blocksWithParts = (blocks || []).map(block => ({
+    const blocksWithParts = (blocks || []).map((block : any) => ({
       ...block,
-      parts: parts?.filter(part => part.blockId === block.id)?.sort((a, b) => {
+      parts: parts?.filter((part : any) => part.blockId === block.id)?.sort((a : any, b : any) => {
           const orderA = a.index ?? 0;
           const orderB = b.index ?? 0;
           if (orderA !== orderB) return orderA - orderB;

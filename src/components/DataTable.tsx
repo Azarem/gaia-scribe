@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { 
   ChevronUp, 
   ChevronDown, 
@@ -549,8 +549,8 @@ export default function DataTable<T extends { id: string }>({
               processedData.map((row) => {
                 const isEditing = editingId === row.id
                 return (
-                  <>
-                    <tr key={row.id} className={clsx(isEditing && 'bg-yellow-50')}>
+                  <Fragment key={row.id}>
+                    <tr className={clsx(isEditing && 'bg-yellow-50')}>
                       {columns.map((column) => (
                         <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {renderCell(column, row, isEditing)}
@@ -618,7 +618,7 @@ export default function DataTable<T extends { id: string }>({
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 )
               })
             )}

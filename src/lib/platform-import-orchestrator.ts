@@ -9,7 +9,8 @@
  * 5. Handle errors and provide feedback
  */
 
-import { db, createWorkingClient } from './supabase'
+import { createWorkingClient } from './supabase'
+import { db } from '../services/supabase'
 import { logger } from './logger'
 import { createId } from '@paralleldrive/cuid2'
 import { PlatformBranchData } from '@gaialabs/shared'

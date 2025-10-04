@@ -5,7 +5,7 @@
  * can only be imported using its corresponding pre-imported Platform.
  */
 
-import { db } from './supabase'
+import { db } from '../services/supabase'
 import { logger } from './logger'
 import type { Platform } from '@prisma/client'
 
@@ -45,12 +45,12 @@ export async function findAllPlatformsByBranchId(
     }
 
     // Look for all platforms that have the matching platformBranchId
-    const matchingPlatforms = platforms?.filter(platform =>
+    const matchingPlatforms = platforms?.filter((platform : any) =>
       platform.platformBranchId === platformBranchId
     ) || []
 
     // Sort by most recently updated/created first
-    matchingPlatforms.sort((a, b) => {
+    matchingPlatforms.sort((a : any, b : any) => {
       const aDate = new Date(a.updatedAt || a.createdAt)
       const bDate = new Date(b.updatedAt || b.createdAt)
       return bDate.getTime() - aDate.getTime()

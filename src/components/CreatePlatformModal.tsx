@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useAuthStore } from '../stores/auth-store'
 import Modal from './Modal'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { Plus, AlertCircle, Cpu } from 'lucide-react'
 import type { Platform } from '@prisma/client'
 
@@ -56,7 +56,8 @@ export default function CreatePlatformModal({
         {
           name: trimmedName,
           isPublic,
-          meta: null
+          meta: null,
+          platformBranchId: null
         },
         user.id
       )

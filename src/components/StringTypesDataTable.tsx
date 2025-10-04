@@ -5,7 +5,7 @@ import type { ColumnDefinition, DataTableProps } from './DataTable'
 import DataTable from './DataTable'
 import CharacterMapGrid from './CharacterMapGrid'
 import StringCommandsTable from './StringCommandsTable'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { useAuthStore } from '../stores/auth-store'
 
 interface StringTypesDataTableProps extends Omit<DataTableProps<StringType>, 'expandedRows' | 'renderExpandedContent'> {

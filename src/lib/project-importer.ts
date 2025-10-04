@@ -11,7 +11,7 @@
  * - Error handling and rollback capabilities
  */
 
-import { PrismaClient } from '@prisma/client'
+//import { PrismaClient } from '@prisma/client'
 import type { InternalProjectData } from './data-converter'
 
 /**
@@ -45,257 +45,257 @@ export interface ImportResult {
  * @param projectData - Transformed project data ready for database insertion
  * @returns Promise<ImportResult> with success status and details
  */
-export async function importProject(
-  prisma: PrismaClient,
-  projectData: InternalProjectData,
-  userId: string
-): Promise<ImportResult> {
-  try {
-    console.log('Starting project import transaction...')
+// export async function importProject(
+//   prisma: PrismaClient,
+//   projectData: InternalProjectData,
+//   userId: string
+// ): Promise<ImportResult> {
+//   try {
+//     console.log('Starting project import transaction...')
     
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Create the main ScribeProject record
-      console.log('Creating ScribeProject record...')
-      const project = await tx.scribeProject.create({
-        data: {
-          ...projectData.project,
-          meta: projectData.project.meta as any,
-          createdBy: userId,
-          updatedBy: userId
-        }
-      })
+//     const result = await prisma.$transaction(async (tx) => {
+//       // 1. Create the main ScribeProject record
+//       console.log('Creating ScribeProject record...')
+//       const project = await tx.scribeProject.create({
+//         data: {
+//           ...projectData.project,
+//           meta: projectData.project.meta as any,
+//           createdBy: userId,
+//           updatedBy: userId
+//         }
+//       })
       
-      console.log(`Created project: ${project.id} - ${project.name}`)
+//       console.log(`Created project: ${project.id} - ${project.name}`)
       
-      // 2. Create COP records
-      console.log('Creating COP records...')
-      const cops = await Promise.all(
-        projectData.cops.map(cop => 
-          tx.cop.create({
-            data: {
-              ...cop,
-              projectId: project.id
-            }
-          })
-        )
-      )
+//       // 2. Create COP records
+//       console.log('Creating COP records...')
+//       const cops = await Promise.all(
+//         projectData.cops.map(cop => 
+//           tx.cop.create({
+//             data: {
+//               ...cop,
+//               projectId: project.id
+//             }
+//           })
+//         )
+//       )
       
-      // 3. Create File records
-      console.log('Creating File records...')
-      const files = await Promise.all(
-        projectData.files.map(file => 
-          tx.file.create({
-            data: {
-              ...file,
-              projectId: project.id,
-              meta: file.meta as any
-            }
-          })
-        )
-      )
+//       // 3. Create File records
+//       console.log('Creating File records...')
+//       const files = await Promise.all(
+//         projectData.files.map(file => 
+//           tx.file.create({
+//             data: {
+//               ...file,
+//               projectId: project.id,
+//               meta: file.meta as any
+//             }
+//           })
+//         )
+//       )
       
-      // 4. Create Block records
-      console.log('Creating Block records...')
-      const blocks = await Promise.all(
-        projectData.blocks.map(block => 
-          tx.block.create({
-            data: {
-              ...block,
-              projectId: project.id,
-              meta: block.meta as any
-            }
-          })
-        )
-      )
+//       // 4. Create Block records
+//       console.log('Creating Block records...')
+//       const blocks = await Promise.all(
+//         projectData.blocks.map(block => 
+//           tx.block.create({
+//             data: {
+//               ...block,
+//               projectId: project.id,
+//               meta: block.meta as any
+//             }
+//           })
+//         )
+//       )
       
-      // 5. Create BlockTransform records (need to map to block IDs)
-      console.log('Creating BlockTransform records...')
-      const blockTransforms = await Promise.all(
-        projectData.blockTransforms.map((transform, index) => {
-          // For now, associate with blocks by index
-          // This will need proper mapping based on actual data structure
-          const blockId = blocks[index % blocks.length]?.id
-          if (!blockId) return null
+//       // 5. Create BlockTransform records (need to map to block IDs)
+//       console.log('Creating BlockTransform records...')
+//       const blockTransforms = await Promise.all(
+//         projectData.blockTransforms.map((transform, index) => {
+//           // For now, associate with blocks by index
+//           // This will need proper mapping based on actual data structure
+//           const blockId = blocks[index % blocks.length]?.id
+//           if (!blockId) return null
           
-          return tx.blockTransform.create({
-            data: {
-              ...transform,
-              blockId
-            }
-          })
-        }).filter(Boolean)
-      )
+//           return tx.blockTransform.create({
+//             data: {
+//               ...transform,
+//               blockId
+//             }
+//           })
+//         }).filter(Boolean)
+//       )
       
-      // 6. Create BlockPart records (need to map to block IDs)
-      console.log('Creating BlockPart records...')
-      const blockParts = await Promise.all(
-        projectData.blockParts.map((part, index) => {
-          // For now, associate with blocks by index
-          // This will need proper mapping based on actual data structure
-          const blockId = blocks[index % blocks.length]?.id
-          if (!blockId) return null
+//       // 6. Create BlockPart records (need to map to block IDs)
+//       console.log('Creating BlockPart records...')
+//       const blockParts = await Promise.all(
+//         projectData.blockParts.map((part, index) => {
+//           // For now, associate with blocks by index
+//           // This will need proper mapping based on actual data structure
+//           const blockId = blocks[index % blocks.length]?.id
+//           if (!blockId) return null
           
-          return tx.blockPart.create({
-            data: {
-              ...part,
-              blockId
-            }
-          })
-        }).filter(Boolean)
-      )
+//           return tx.blockPart.create({
+//             data: {
+//               ...part,
+//               blockId
+//             }
+//           })
+//         }).filter(Boolean)
+//       )
       
-      // 7. Create Label records
-      console.log('Creating Label records...')
-      const labels = await Promise.all(
-        projectData.labels.map(label => 
-          tx.label.create({
-            data: {
-              ...label,
-              projectId: project.id
-            }
-          })
-        )
-      )
+//       // 7. Create Label records
+//       console.log('Creating Label records...')
+//       const labels = await Promise.all(
+//         projectData.labels.map(label => 
+//           tx.label.create({
+//             data: {
+//               ...label,
+//               projectId: project.id
+//             }
+//           })
+//         )
+//       )
       
-      // 8. Create GameMnemonic records
-      console.log('Creating GameMnemonic records...')
-      const mnemonics = await Promise.all(
-        projectData.mnemonics.map(mnemonic => 
-          tx.gameMnemonic.create({
-            data: {
-              ...mnemonic,
-              projectId: project.id,
-              meta: mnemonic.meta as any
-            }
-          })
-        )
-      )
+//       // 8. Create GameMnemonic records
+//       console.log('Creating GameMnemonic records...')
+//       const mnemonics = await Promise.all(
+//         projectData.mnemonics.map(mnemonic => 
+//           tx.gameMnemonic.create({
+//             data: {
+//               ...mnemonic,
+//               projectId: project.id,
+//               meta: mnemonic.meta as any
+//             }
+//           })
+//         )
+//       )
       
-      // 9. Create Override records
-      console.log('Creating Override records...')
-      const overrides = await Promise.all(
-        projectData.overrides.map(override => 
-          tx.override.create({
-            data: {
-              ...override,
-              projectId: project.id
-            }
-          })
-        )
-      )
+//       // 9. Create Override records
+//       console.log('Creating Override records...')
+//       const overrides = await Promise.all(
+//         projectData.overrides.map(override => 
+//           tx.override.create({
+//             data: {
+//               ...override,
+//               projectId: project.id
+//             }
+//           })
+//         )
+//       )
       
-      // 10. Create Rewrite records
-      console.log('Creating Rewrite records...')
-      const rewrites = await Promise.all(
-        projectData.rewrites.map(rewrite => 
-          tx.rewrite.create({
-            data: {
-              ...rewrite,
-              projectId: project.id
-            }
-          })
-        )
-      )
+//       // 10. Create Rewrite records
+//       console.log('Creating Rewrite records...')
+//       const rewrites = await Promise.all(
+//         projectData.rewrites.map(rewrite => 
+//           tx.rewrite.create({
+//             data: {
+//               ...rewrite,
+//               projectId: project.id
+//             }
+//           })
+//         )
+//       )
       
-      // 11. Create StringType records
-      console.log('Creating StringType records...')
-      const stringTypes = await Promise.all(
-        projectData.stringTypes.map(stringType => 
-          tx.stringType.create({
-            data: {
-              ...stringType,
-              projectId: project.id,
-              meta: stringType.meta as any
-            }
-          })
-        )
-      )
+//       // 11. Create StringType records
+//       console.log('Creating StringType records...')
+//       const stringTypes = await Promise.all(
+//         projectData.stringTypes.map(stringType => 
+//           tx.stringType.create({
+//             data: {
+//               ...stringType,
+//               projectId: project.id,
+//               meta: stringType.meta as any
+//             }
+//           })
+//         )
+//       )
       
-      // 12. Create StringCommand records (need to map to stringType IDs)
-      console.log('Creating StringCommand records...')
-      const stringCommands = await Promise.all(
-        projectData.stringCommands.map((command, index) => {
-          // For now, associate with stringTypes by index
-          // This will need proper mapping based on actual data structure
-          const stringTypeId = stringTypes[index % stringTypes.length]?.id
-          if (!stringTypeId) return null
+//       // 12. Create StringCommand records (need to map to stringType IDs)
+//       console.log('Creating StringCommand records...')
+//       const stringCommands = await Promise.all(
+//         projectData.stringCommands.map((command, index) => {
+//           // For now, associate with stringTypes by index
+//           // This will need proper mapping based on actual data structure
+//           const stringTypeId = stringTypes[index % stringTypes.length]?.id
+//           if (!stringTypeId) return null
           
-          return tx.stringCommand.create({
-            data: {
-              ...command,
-              stringTypeId,
-              meta: command.meta as any
-            }
-          })
-        }).filter(Boolean)
-      )
+//           return tx.stringCommand.create({
+//             data: {
+//               ...command,
+//               stringTypeId,
+//               meta: command.meta as any
+//             }
+//           })
+//         }).filter(Boolean)
+//       )
       
-      // 13. Create Struct records
-      console.log('Creating Struct records...')
-      const structs = await Promise.all(
-        projectData.structs.map(struct => 
-          tx.struct.create({
-            data: {
-              ...struct,
-              projectId: project.id,
-              meta: struct.meta as any
-            }
-          })
-        )
-      )
+//       // 13. Create Struct records
+//       console.log('Creating Struct records...')
+//       const structs = await Promise.all(
+//         projectData.structs.map(struct => 
+//           tx.struct.create({
+//             data: {
+//               ...struct,
+//               projectId: project.id,
+//               meta: struct.meta as any
+//             }
+//           })
+//         )
+//       )
       
-      return {
-        project,
-        counts: {
-          projectCreated: true,
-          copsCreated: cops.length,
-          filesCreated: files.length,
-          blocksCreated: blocks.length,
-          blockTransformsCreated: blockTransforms.length,
-          blockPartsCreated: blockParts.length,
-          labelsCreated: labels.length,
-          mnemonicsCreated: mnemonics.length,
-          overridesCreated: overrides.length,
-          rewritesCreated: rewrites.length,
-          stringTypesCreated: stringTypes.length,
-          stringCommandsCreated: stringCommands.length,
-          structsCreated: structs.length
-        }
-      }
-    })
+//       return {
+//         project,
+//         counts: {
+//           projectCreated: true,
+//           copsCreated: cops.length,
+//           filesCreated: files.length,
+//           blocksCreated: blocks.length,
+//           blockTransformsCreated: blockTransforms.length,
+//           blockPartsCreated: blockParts.length,
+//           labelsCreated: labels.length,
+//           mnemonicsCreated: mnemonics.length,
+//           overridesCreated: overrides.length,
+//           rewritesCreated: rewrites.length,
+//           stringTypesCreated: stringTypes.length,
+//           stringCommandsCreated: stringCommands.length,
+//           structsCreated: structs.length
+//         }
+//       }
+//     })
     
-    console.log('Project import completed successfully!')
+//     console.log('Project import completed successfully!')
     
-    return {
-      success: true,
-      projectId: result.project.id,
-      details: result.counts
-    }
+//     return {
+//       success: true,
+//       projectId: result.project.id,
+//       details: result.counts
+//     }
     
-  } catch (error) {
-    console.error('Project import failed:', error)
+//   } catch (error) {
+//     console.error('Project import failed:', error)
     
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-      details: {
-        projectCreated: false,
-        copsCreated: 0,
-        filesCreated: 0,
-        blocksCreated: 0,
-        blockTransformsCreated: 0,
-        blockPartsCreated: 0,
-        labelsCreated: 0,
-        mnemonicsCreated: 0,
-        overridesCreated: 0,
-        rewritesCreated: 0,
-        stringTypesCreated: 0,
-        stringCommandsCreated: 0,
-        structsCreated: 0
-      }
-    }
-  }
-}
+//     return {
+//       success: false,
+//       error: error instanceof Error ? error.message : 'Unknown error occurred',
+//       details: {
+//         projectCreated: false,
+//         copsCreated: 0,
+//         filesCreated: 0,
+//         blocksCreated: 0,
+//         blockTransformsCreated: 0,
+//         blockPartsCreated: 0,
+//         labelsCreated: 0,
+//         mnemonicsCreated: 0,
+//         overridesCreated: 0,
+//         rewritesCreated: 0,
+//         stringTypesCreated: 0,
+//         stringCommandsCreated: 0,
+//         structsCreated: 0
+//       }
+//     }
+//   }
+// }
 
 /**
  * Validate project data before import

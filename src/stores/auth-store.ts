@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { supabase, db, clearWorkingClientCache } from '../lib/supabase'
+import { supabase, clearWorkingClientCache } from '../lib/supabase'
+import { db } from '../services/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 import {
   isAnonymousModeEnabled,

@@ -1,4 +1,4 @@
-import { db } from './supabase'
+import { db } from '../services/supabase'
 
 // Sample data for different platform types
 const PLATFORM_TEMPLATES = {

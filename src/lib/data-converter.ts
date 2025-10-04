@@ -37,6 +37,8 @@ import type {
   Struct
 } from '@prisma/client'
 
+import { createId } from '@paralleldrive/cuid2'
+
 /**
  * Complete project data structure from external API
  * Based on GameRomBranch as the primary data source
@@ -55,7 +57,7 @@ export interface CompleteGameRomData {
  * Note: projectId will be set after the project is created
  */
 export interface InternalProjectData {
-  project: Omit<ScribeProject, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>
+  project: Omit<ScribeProject, 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>
   cops: Omit<Cop, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   files: Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   blocks: Omit<Block, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
@@ -65,9 +67,9 @@ export interface InternalProjectData {
   mnemonics: Omit<GameMnemonic, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   overrides: Omit<Override, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   rewrites: Omit<Rewrite, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
-  stringTypes: Omit<StringType, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
-  stringCommands: Omit<StringCommand, 'id' | 'stringTypeId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
-  structs: Omit<Struct, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
+  stringTypes: Omit<StringType, 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[]
+  stringCommands: Omit<StringCommand, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[]
+  structs: Omit<Struct, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[]
 }
 
 /**
@@ -89,6 +91,7 @@ export function convertExternalToInternal(
   
   // Create the main ScribeProject record
   const project = {
+    id: createId(),
     name: projectName,
     isPublic: false, // Default to private for imported projects
     gameRomBranchId: gameRomBranchId,
@@ -450,33 +453,33 @@ function extractRewrites(fixups: any): Omit<Rewrite, 'id' | 'projectId' | 'creat
  * Extract string type definitions from types JSON structure
  * Strings come in as key/value pairs - just flatten them and assign IDs
  */
-function extractStringTypes(types: any): {
-  stringTypes: any[]
-  stringCommands: any[]
+function extractStringTypes(strings: any): {
+  stringTypes: Omit<StringType, 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[]
+  stringCommands: Omit<StringCommand, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[]
 } {
-  if (!types || !types.strings || typeof types.strings !== 'object') {
+  if (!strings || typeof strings !== 'object') {
     return { stringTypes: [], stringCommands: [] }
   }
 
-  const stringTypes: any[] = []
-  const stringCommands: any[] = []
+  const stringTypes: Omit<StringType, 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[] = []
+  const stringCommands: Omit<StringCommand, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[] = []
 
   // Process each string type - key is type name, value is type data
-  Object.entries(types.strings).forEach(([typeName, stringData]: [string, any]) => {
+  Object.entries(strings).forEach(([typeName, stringData]: [string, any]) => {
     if (!stringData || typeof stringData !== 'object') return
+
+    const stringTypeId = createId()
 
     // Create the StringType record
     stringTypes.push({
+      id: stringTypeId,
       name: typeName,
       delimiter: stringData.delimiter || null,
       shiftType: stringData.shiftType || null,
       terminator: stringData.terminator || null,
       greedy: stringData.greedyTerminator || false,
       characterMap: stringData.characterMap || [],
-      meta: { layers: stringData.layers || [] },
-      createdBy: '',
-      updatedBy: null,
-      deletedBy: null
+      meta: { layers: stringData.layers || [] }
     })
 
     // Create StringCommand records for each command
@@ -485,17 +488,14 @@ function extractStringTypes(types: any): {
         if (!commandData || typeof commandData !== 'object') return
 
         stringCommands.push({
-          stringTypeName: typeName, // Use string type name as key for later mapping
+          stringTypeId: stringTypeId,
           mnemonic: commandName,
           code: commandData.code || 0,
           halt: commandData.halt || false,
           types: commandData.types || [],
           parts: commandData.parts || [],
           delimiter: commandData.delimiter || null,
-          meta: commandData.meta || null,
-          createdBy: '',
-          updatedBy: null,
-          deletedBy: null
+          meta: commandData.meta || null
         })
       })
     }
@@ -507,13 +507,13 @@ function extractStringTypes(types: any): {
 /**
  * Extract struct definitions from structs JSON structure
  */
-function extractStructs(types: any): Omit<Struct, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[] {
-  if (!types || typeof types !== 'object' || !types.structs || typeof types.structs !== 'object') return []
+function extractStructs(structs: any): Omit<Struct, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[] {
+  if (!structs || typeof structs !== 'object') return []
 
-  const structRecords: Omit<Struct, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[] = []
+  const structRecords: Omit<Struct, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[] = []
 
   // Process each struct in the structs object
-  Object.entries(types.structs).forEach(([structName, structData]: [string, any]) => {
+  Object.entries(structs).forEach(([structName, structData]: [string, any]) => {
     if (!structData || typeof structData !== 'object') return
 
     structRecords.push({
@@ -523,10 +523,7 @@ function extractStructs(types: any): Omit<Struct, 'id' | 'projectId' | 'createdA
       discriminator: structData.discriminator ?? null,
       parent: structData.parent ?? null,
       parts: structData.parts ?? [],
-      meta: null,
-      createdBy: '', // Will be set by caller
-      updatedBy: null,
-      deletedBy: null
+      meta: null
     })
   })
 

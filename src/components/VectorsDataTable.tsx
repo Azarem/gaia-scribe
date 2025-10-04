@@ -1,18 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../stores/auth-store'
 import { usePlatformPermissions } from '../hooks/usePlatformPermissions'
-import { db, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { db } from '../services/supabase'
 import type { Vector } from '@prisma/client'
 import DataTable, { type DataTableProps, type ColumnDefinition } from './DataTable'
 
 interface VectorsDataTableProps extends Omit<DataTableProps<Vector>, 'data' | 'columns'> {
   platformId: string
-  columns: ColumnDefinition<Vector>[]
 }
 
 export default function VectorsDataTable({
   platformId,
-  columns,
   ...props
 }: VectorsDataTableProps) {
   const { user, isAnonymousMode } = useAuthStore()
@@ -20,6 +19,32 @@ export default function VectorsDataTable({
   const [data, setData] = useState<Vector[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  const columns : ColumnDefinition<Vector>[] = [
+    { key: 'name', label: 'Name', sortable: true, editable: true, type: 'text' },
+    {
+      key: 'address',
+      label: 'Address',
+      sortable: true,
+      editable: true,
+      type: 'number',
+      render: (value) => `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
+    },
+    {
+      key: 'isEntryPoint',
+      label: 'Entry',
+      editable: true,
+      type: 'boolean',
+      render: (value) => value ? 'Yes' : 'No'
+    },
+    {
+      key: 'isRomHeader',
+      label: 'Head',
+      editable: true,
+      type: 'boolean',
+      render: (value) => value ? 'Yes' : 'No'
+    },
+  ];
 
   // Load vectors for the platform
   const loadData = useCallback(async () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 
 export interface SectionCounts {
   files: number

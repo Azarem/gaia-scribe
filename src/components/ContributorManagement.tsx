@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuthStore } from '../stores/auth-store'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { Users, Plus, Trash2, Search, Mail, UserCheck } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 

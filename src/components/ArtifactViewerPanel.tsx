@@ -2,7 +2,7 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import { X, Code, AlertCircle, Loader, GripVertical } from 'lucide-react'
 import clsx from 'clsx'
 import { useArtifactViewerStore } from '../stores/artifact-viewer-store'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 
 export default function ArtifactViewerPanel() {
   const {

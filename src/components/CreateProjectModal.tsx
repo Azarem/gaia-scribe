@@ -3,11 +3,12 @@ import { useAuthStore } from '../stores/auth-store'
 import Modal from './Modal'
 import FileUpload from './FileUpload'
 import PlatformSelector from './PlatformSelector'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { parseRomHeader, generateProjectName, validateRomFile, type RomHeaderInfo } from '../lib/rom-parser'
 import { Plus, CheckCircle, AlertCircle, Gamepad2 } from 'lucide-react'
 import type { ScribeProject } from '@prisma/client'
 import clsx from 'clsx'
+import { createId } from '@paralleldrive/cuid2'
 
 interface CreateProjectModalProps {
   isOpen: boolean
@@ -100,6 +101,8 @@ export default function CreateProjectModal({
       // Create the project
       const { data: newProject, error: createError } = await db.projects.create(
         {
+          id: createId(),
+          gameRomBranchId: null,
           name: projectName.trim(),
           isPublic: false, // Always private by default
           platformId: selectedPlatformId,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { ArrowLeft, Home, Cpu } from 'lucide-react'
 import type { Platform } from '@prisma/client'
 import { getPlatformSectionByRoute } from '../lib/platform-sections'
@@ -56,24 +56,6 @@ function PlatformSectionContent({ sectionKey, sectionName, platform }: PlatformS
       return (
         <VectorsDataTable
           platformId={platform.id}
-          columns={[
-            { key: 'name', label: 'Name', sortable: true, editable: true, type: 'text' },
-            {
-              key: 'address',
-              label: 'Address',
-              sortable: true,
-              editable: true,
-              type: 'number',
-              render: (value) => `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
-            },
-            {
-              key: 'isEntry',
-              label: 'Entry Point',
-              editable: true,
-              type: 'boolean',
-              render: (value) => value ? 'Yes' : 'No'
-            },
-          ]}
           searchPlaceholder="Search vectors..."
           addButtonText="Add Vector"
           emptyMessage="No vectors found. Click 'Add Vector' to create your first entry."

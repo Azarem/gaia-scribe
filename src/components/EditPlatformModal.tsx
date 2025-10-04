@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../stores/auth-store'
 import Modal from './Modal'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 import type { Platform } from '@prisma/client'
 
 interface EditPlatformModalProps {

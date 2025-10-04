@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { db, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { db } from '../services/supabase'
 import { logger } from '../lib/logger'
 import { Calendar, Edit, Trash2, ArrowLeft, Globe, Lock, Cpu, Database } from 'lucide-react'
 import type { Platform } from '@prisma/client'

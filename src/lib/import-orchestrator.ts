@@ -10,8 +10,9 @@
  */
 
 import { createId } from '@paralleldrive/cuid2'
-import { db, createWorkingClient } from './supabase'
-import { convertExternalToInternal, type CompleteGameRomData } from './data-converter'
+import { createWorkingClient } from './supabase'
+import { db } from '../services/supabase'
+import { convertExternalToInternal, InternalProjectData, type CompleteGameRomData } from './data-converter'
 import { validateProjectData } from './project-importer'
 
 /**
@@ -216,7 +217,7 @@ export class ImportOrchestrator {
    * @returns Promise<ImportServiceResult>
    */
   private async importProjectWithSupabase(
-    internalData: any,
+    internalData: InternalProjectData,
     userId: string
   ): Promise<ImportServiceResult> {
     try {
@@ -226,16 +227,7 @@ export class ImportOrchestrator {
       const supabase = createWorkingClient()
 
       // Create the main project record using the existing db.projects.create method
-      const { data: newProject, error: createError } = await db.projects.create(
-        {
-          name: internalData.project.name,
-          isPublic: internalData.project.isPublic,
-          gameRomId: internalData.project.gameRomId,
-          platformId: internalData.project.platformId,
-          meta: internalData.project.meta
-        },
-        userId
-      )
+      const { data: newProject, error: createError } = await db.projects.create(internalData.project, userId)
 
       if (createError || !newProject) {
         throw new Error(`Failed to create project: ${createError?.message || 'Unknown error'}`)

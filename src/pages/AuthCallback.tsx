@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth-store'
-import { db } from '../lib/supabase'
+import { db } from '../services/supabase'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
