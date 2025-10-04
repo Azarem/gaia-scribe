@@ -499,26 +499,13 @@ export class ImportOrchestrator {
         }
       }
 
-      // Insert StringTypes and StringCommands
-      const stringTypeNameToIdMapping: { [stringTypeName: string]: string } = {}
-
       // First, insert StringType records
       if (internalData.stringTypes && internalData.stringTypes.length > 0) {
         console.log(`Inserting ${internalData.stringTypes.length} string types...`)
         const stringTypesToInsert = internalData.stringTypes.map((stringType: any) => {
-          const stringTypeId = createId()
-          // Store mapping from string type name to actual database ID
-          stringTypeNameToIdMapping[stringType.name] = stringTypeId
 
           return {
-            id: stringTypeId,
-            name: stringType.name,
-            delimiter: stringType.delimiter,
-            shiftType: stringType.shiftType,
-            terminator: stringType.terminator,
-            greedy: stringType.greedy,
-            meta: stringType.meta,
-            characterMap: stringType.characterMap || [],
+            ...stringType,
             projectId: newProject.id,
             createdBy: userId
           }
@@ -541,23 +528,8 @@ export class ImportOrchestrator {
         console.log(`Inserting ${internalData.stringCommands.length} string commands...`)
         const stringCommandsToInsert = internalData.stringCommands
           .map((command: any) => {
-            // Map stringTypeName to actual string type ID
-            const stringTypeId = stringTypeNameToIdMapping[command.stringTypeName]
-            if (!stringTypeId) {
-              console.warn(`No string type ID found for string type name: ${command.stringTypeName}`)
-              return null
-            }
-
             return {
-              id: createId(),
-              code: command.code,
-              mnemonic: command.mnemonic,
-              types: command.types || [],
-              delimiter: command.delimiter,
-              halt: command.halt,
-              parts: command.parts || [],
-              meta: command.meta,
-              stringTypeId,
+              ...command,
               createdBy: userId
             }
           })
