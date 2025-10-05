@@ -105,7 +105,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
   const [editingCells, setEditingCells] = useState<Set<string>>(new Set()) // Set of "rowId:fieldKey"
   const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set()) // Set of row IDs with unsaved changes
   const [editingData, setEditingData] = useState<{ [rowId: string]: Record<string, any> }>({}) // Temporary editing values
-  const [originalData, setOriginalData] = useState<{ [rowId: string]: GridRow }>({}) // Original values for revert
+//  const [originalData, setOriginalData] = useState<{ [rowId: string]: GridRow }>({}) // Original values for revert
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({}) // "rowId:fieldKey" -> error message
   const [savingRows, setSavingRows] = useState<Set<string>>(new Set()) // Set of row IDs currently being saved
 
@@ -261,9 +261,9 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
           return
         }
 
-        const { data: stringTypes, error: stringTypesError } = await db.stringTypes.getByProject(projectId)
-        const { data: structs, error: structsError } = await db.structs.getByProject(projectId)
-        const { data: platformTypes, error: platformTypesError } = await db.platformTypes.getByPlatform(project?.platformId || '')
+        const { data: stringTypes } = await db.stringTypes.getByProject(projectId)
+        const { data: structs } = await db.structs.getByProject(projectId)
+        const { data: platformTypes } = await db.platformTypes.getByPlatform(project?.platformId || '')
 
         const newTypeList: { id: string; name: string }[] = []
         stringTypes?.forEach(stringType => {
@@ -611,22 +611,22 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
     // CRITICAL: Only store original data once per row to preserve the true original state
     // We must capture the CURRENT state of the row including any calculated values from editingData
     // If we already have originalData for this row, don't overwrite it
-    setOriginalData(prev => {
-      if (prev[rowId]) {
-        return prev // Already have original data, don't overwrite
-      }
+    // setOriginalData(prev => {
+    //   if (prev[rowId]) {
+    //     return prev // Already have original data, don't overwrite
+    //   }
 
-      // CRITICAL FIX: Build the original data from the CURRENT state, not from stale gridRows
-      // This ensures we capture calculated values (like size = end - location) that exist in editingData
-      const currentRow = gridRows.find(row => row.id === rowId)
-      if (currentRow) {
-        // Merge the current row with any existing editingData to capture calculated values
-        const currentEditedData = editingData[rowId] || {}
-        const mergedRow = { ...currentRow, ...currentEditedData }
-        return { ...prev, [rowId]: mergedRow }
-      }
-      return prev
-    })
+    //   // CRITICAL FIX: Build the original data from the CURRENT state, not from stale gridRows
+    //   // This ensures we capture calculated values (like size = end - location) that exist in editingData
+    //   const currentRow = gridRows.find(row => row.id === rowId)
+    //   if (currentRow) {
+    //     // Merge the current row with any existing editingData to capture calculated values
+    //     const currentEditedData = editingData[rowId] || {}
+    //     const mergedRow = { ...currentRow, ...currentEditedData }
+    //     return { ...prev, [rowId]: mergedRow }
+    //   }
+    //   return prev
+    // })
 
     // Initialize editing data with current value
     // CRITICAL: Use the currentValue parameter which already prefers editingData over row data
@@ -805,11 +805,11 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
         return newData
       })
 
-      setOriginalData(prev => {
-        const newData = { ...prev }
-        delete newData[rowId]
-        return newData
-      })
+      // setOriginalData(prev => {
+      //   const newData = { ...prev }
+      //   delete newData[rowId]
+      //   return newData
+      // })
 
       // Clear any validation errors for this row
       setValidationErrors(prev => {
@@ -875,11 +875,11 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
       return newData
     })
 
-    setOriginalData(prev => {
-      const newData = { ...prev }
-      delete newData[rowId]
-      return newData
-    })
+    // setOriginalData(prev => {
+    //   const newData = { ...prev }
+    //   delete newData[rowId]
+    //   return newData
+    // })
 
     // Clear any validation errors for this row
     setValidationErrors(prev => {
