@@ -10,6 +10,7 @@ import clsx from 'clsx'
 import RomPathModal from './RomPathModal'
 import NotificationModal from './NotificationModal'
 import { createBuildOrchestrator, type BuildProgressCallback } from '../lib/build-orchestrator'
+import { sortBlockPartsInPlace } from '../lib/sort-utils'
 
 interface BlockWithAddresses extends Block {
   startAddress?: number
@@ -74,30 +75,31 @@ type GridRow = BlockGridRow | PartGridRow
 interface EditableField {
   key: string
   label: string
-  type: 'text' | 'number' | 'hex' | 'boolean' | 'select'
+  type: 'text' | 'number' | 'hex' | 'boolean' | 'select' | 'autocomplete'
   required?: boolean
   validate?: (value: any) => string | null
-  options?: { value: any; label: string }[] // For select type
+  options?: { id: string; name: string }[] // For select and autocomplete types
   placeholder?: string
   rowTypes: ('block' | 'part')[] // Which row types this field applies to
 }
 
 interface BlocksDataTableProps extends Omit<DataTableProps<BlockWithAddresses>, 'data'> {
-  data: Block[]
+  //data: Block[]
   projectId: string
   project?: ScribeProject
   onBuildComplete?: () => void
 }
 
-export default function BlocksDataTable({ data, projectId, project, onBuildComplete, columns, ...props }: BlocksDataTableProps) {
+export default function BlocksDataTable({ projectId, project, onBuildComplete, columns, ...props }: BlocksDataTableProps) {
   const { user, isAnonymousMode } = useAuthStore()
   const { openPanel } = useArtifactViewerStore()
   const [currentBank, setCurrentBank] = useState<number>(0)
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set())
-  const [blockParts, setBlockParts] = useState<{ [blockId: string]: BlockPart[] }>({})
+  const [blocksWithAddresses, setBlocksWithAddresses] = useState<BlockWithAddresses[]>([])
   const [partsLoading, setPartsLoading] = useState(false)
   const [partsError, setPartsError] = useState<string | null>(null)
   const [dataReady, setDataReady] = useState(false)
+  const [typeList, setTypeList] = useState<{ id: string; name: string }[]>([])
 
   // Inline editing state
   const [editingCells, setEditingCells] = useState<Set<string>>(new Set()) // Set of "rowId:fieldKey"
@@ -107,6 +109,9 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({}) // "rowId:fieldKey" -> error message
   const [savingRows, setSavingRows] = useState<Set<string>>(new Set()) // Set of row IDs currently being saved
 
+  // Autocomplete state
+  const [autocompleteOpen, setAutocompleteOpen] = useState<Set<string>>(new Set()) // Set of "rowId:fieldKey" with open dropdowns
+  const [autocompleteSelectedIndex, setAutocompleteSelectedIndex] = useState<{ [key: string]: number }>({}) // "rowId:fieldKey" -> selected index
 
 
   // Field configuration for inline editing
@@ -165,16 +170,10 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     {
       key: 'type',
       label: 'Type',
-      type: 'select',
+      type: 'autocomplete',
       required: true,
       rowTypes: ['part'],
-      options: [
-        { value: 'Code', label: 'Code' },
-        { value: 'Data', label: 'Data' },
-        { value: 'Graphics', label: 'Graphics' },
-        { value: 'Audio', label: 'Audio' },
-        { value: 'Text', label: 'Text' }
-      ],
+      options: typeList,
       validate: (value: string) => {
         if (!value?.trim()) return 'Type is required'
         return null
@@ -208,7 +207,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       type: 'text',
       rowTypes: ['block']
     }
-  ], [])
+  ], [typeList])
 
   // Build-related state
   const [showRomPathModal, setShowRomPathModal] = useState(false)
@@ -231,29 +230,55 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     message: ''
   })
 
+  const handlePartChange = (block: BlockWithAddresses) => {
+    if (block.parts) {
+      block.startAddress = Math.min(...block.parts.map(part => part.location))
+      block.endAddress = Math.max(...block.parts.map(part => part.location + part.size))
+      sortBlockPartsInPlace(block.parts)
+    }
+  }
+
   // Fetch all BlockParts for the project
   useEffect(() => {
-    const fetchBlockParts = async () => {
-      if (!projectId || data.length === 0) {
-        setDataReady(true) // No blocks means we're ready (empty state)
-        return
-      }
+    if (!projectId) {
+      setDataReady(true) // No blocks means we're ready (empty state)
+      return
+    }
 
+    const fetchBlocksAndParts = async () => {
       setPartsLoading(true)
       setPartsError(null)
       setDataReady(false)
 
       try {
+        const { data: blocks, error: blocksError } = await db.blocks.getByProject(projectId)
         const { data: parts, error } = await db.blockParts.getByProject(projectId)
 
-        if (error) {
-          console.error('Error fetching block parts:', error)
+        if (error || blocksError) {
+          console.error('Error fetching block parts:', error || blocksError)
           setPartsError('Failed to load block parts')
           setDataReady(true) // Set ready even on error to prevent infinite loading
           return
         }
 
-        // Group parts by blockId
+        const { data: stringTypes, error: stringTypesError } = await db.stringTypes.getByProject(projectId)
+        const { data: structs, error: structsError } = await db.structs.getByProject(projectId)
+        const { data: platformTypes, error: platformTypesError } = await db.platformTypes.getByPlatform(project?.platformId || '')
+
+        const newTypeList: { id: string; name: string }[] = []
+        stringTypes?.forEach(stringType => {
+          newTypeList.push({ id: stringType.id, name: stringType.name })
+        })
+        structs?.forEach(struct => {
+          newTypeList.push({ id: struct.id, name: struct.name })
+        })
+        platformTypes?.forEach(platformType => {
+          newTypeList.push({ id: platformType.id, name: platformType.name })
+        })
+        newTypeList.sort((a, b) => a.name.localeCompare(b.name))
+        setTypeList(newTypeList)
+
+        // Initialize block lookup
         const partsByBlock: { [blockId: string]: BlockPart[] } = {}
         parts?.forEach(part => {
           if (!partsByBlock[part.blockId]) {
@@ -262,16 +287,17 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
           partsByBlock[part.blockId].push(part)
         })
 
-        // Sort parts within each block by index (ascending)
-        Object.keys(partsByBlock).forEach(blockId => {
-          partsByBlock[blockId].sort((a, b) => {
-            const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-            const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-            return indexA - indexB
-          })
+        var blocksWithParts = blocks.map(block => {
+          const parts = partsByBlock[block.id]
+          return {
+            ...block,
+            parts: sortBlockPartsInPlace(parts),
+            startAddress: Math.min(...parts.map(part => part.location)),
+            endAddress: Math.max(...parts.map(part => part.location + part.size))
+          }
         })
 
-        setBlockParts(partsByBlock)
+        setBlocksWithAddresses(blocksWithParts)
         setDataReady(true)
       } catch (err) {
         console.error('Error fetching block parts:', err)
@@ -282,8 +308,8 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       }
     }
 
-    fetchBlockParts()
-  }, [projectId, data.length])
+    fetchBlocksAndParts()
+  }, [projectId])
 
   // Real-time subscriptions for collaborative editing
   useEffect(() => {
@@ -295,58 +321,70 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       return
     }
 
-    // Subscribe to BlockPart changes
+    // React 19 best practice: Use ignore flag to prevent race conditions
+    // This prevents stale event handlers from updating state after cleanup
+    // Especially important with React Strict Mode's double-invocation in development
+    let ignore = false
+
+    // Subscribe to BlockPart changes for this project
+    // Note: We subscribe to all BlockPart changes for the project, not filtered by blockId
+    // This prevents subscription recreation when blocks change
     const blockPartsChannel = supabase
-      .channel('blockparts-changes')
+      .channel(`blockparts-changes-${Date.now()}`) // Unique channel name to prevent conflicts
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'BlockPart',
-        filter: `blockId=in.(${data.map(block => block.id).join(',')})`
+        table: 'BlockPart'
       }, (payload) => {
+        if (ignore) return // Prevent stale handler execution
+
         const newPart = payload.new as BlockPart
-        setBlockParts(prev => {
-          const updated = { ...prev }
-          if (!updated[newPart.blockId]) {
-            updated[newPart.blockId] = []
-          }
-          // Check if part already exists to avoid duplicates
-          const existingIndex = updated[newPart.blockId].findIndex(p => p.id === newPart.id)
-          if (existingIndex === -1) {
-            updated[newPart.blockId] = [...updated[newPart.blockId], newPart]
-            // Sort parts by index
-            updated[newPart.blockId].sort((a, b) => {
-              const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-              const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-              return indexA - indexB
-            })
-          }
-          return updated
-        })
+        setBlocksWithAddresses(prev => 
+          prev.map(block => {
+            if (block.id === newPart.blockId) {
+              // Check if part already exists to prevent duplicates
+              const partExists = block.parts?.some(p => p.id === newPart.id)
+              if (partExists) return block
+
+              // Create new block with new parts array (immutable update)
+              const updatedBlock = {
+                ...block,
+                parts: [...(block.parts || []), newPart]
+              }
+              handlePartChange(updatedBlock)
+              return updatedBlock
+            }
+            return block
+          })
+        )
       })
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'BlockPart',
-        filter: `blockId=in.(${data.map(block => block.id).join(',')})`
+        table: 'BlockPart'
       }, (payload) => {
+        if (ignore) return // Prevent stale handler execution
+
         const updatedPart = payload.new as BlockPart
-        setBlockParts(prev => {
-          const updated = { ...prev }
-          Object.keys(updated).forEach(blockId => {
-            const partIndex = updated[blockId].findIndex(part => part.id === updatedPart.id)
-            if (partIndex !== -1) {
-              updated[blockId][partIndex] = updatedPart
-              // Re-sort parts by index
-              updated[blockId].sort((a, b) => {
-                const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-                const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-                return indexA - indexB
-              })
+        setBlocksWithAddresses(prev => 
+          prev.map(block => {
+            if (block.id === updatedPart.blockId && block.parts) {
+              const partIndex = block.parts.findIndex(part => part.id === updatedPart.id)
+              if (partIndex !== -1) {
+                // Create new parts array with updated part (immutable update)
+                const newParts = [...block.parts]
+                newParts[partIndex] = updatedPart
+                const updatedBlock = {
+                  ...block,
+                  parts: newParts
+                }
+                handlePartChange(updatedBlock)
+                return updatedBlock
+              }
             }
+            return block
           })
-          return updated
-        })
+        )
 
         // Clear dirty state if this update came from another user
         setDirtyRows(prev => {
@@ -365,17 +403,25 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       .on('postgres_changes', {
         event: 'DELETE',
         schema: 'public',
-        table: 'BlockPart',
-        filter: `blockId=in.(${data.map(block => block.id).join(',')})`
+        table: 'BlockPart'
       }, (payload) => {
+        if (ignore) return // Prevent stale handler execution
+
         const deletedPart = payload.old as BlockPart
-        setBlockParts(prev => {
-          const updated = { ...prev }
-          Object.keys(updated).forEach(blockId => {
-            updated[blockId] = updated[blockId].filter(part => part.id !== deletedPart.id)
+        setBlocksWithAddresses(prev => 
+          prev.map(block => {
+            if (block.id === deletedPart.blockId && block.parts) {
+              // Create new parts array without deleted part (immutable update)
+              const updatedBlock = {
+                ...block,
+                parts: block.parts.filter(part => part.id !== deletedPart.id)
+              }
+              handlePartChange(updatedBlock)
+              return updatedBlock
+            }
+            return block
           })
-          return updated
-        })
+        )
 
         // Clear any editing state for the deleted part
         setDirtyRows(prev => {
@@ -393,63 +439,55 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       .subscribe()
 
     return () => {
+      // Set ignore flag BEFORE cleanup to prevent any queued events from executing
+      ignore = true
       supabase.removeChannel(blockPartsChannel)
     }
-  }, [projectId, data, user, isAnonymousMode])
+    // CRITICAL: Do NOT include blocksWithAddresses or setBlocksWithAddresses in dependencies
+    // Including blocksWithAddresses causes subscription recreation every time state updates,
+    // leading to duplicate event processing and double-triggering
+  }, [projectId, user, isAnonymousMode])
 
   // Calculate addresses and group blocks by memory bank
-  const blocksWithAddresses = useMemo(() => {
-    // Only calculate addresses when data is ready
-    if (!dataReady) {
-      return data.map(block => ({
-        ...block,
-        startAddress: undefined,
-        endAddress: undefined,
-        parts: []
-      }))
-    }
+  // const blocksWithAddresses = useMemo(() => {
+  //   // Only calculate addresses when data is ready
+  //   if (!blocks || !blocks.length) return []
 
-    return data.map(block => {
-      const parts = blockParts[block.id] || []
-      let startAddress: number | undefined
-      let endAddress: number | undefined
+  //   return blocks.map(block => {
+  //     const parts = block.parts
+  //     let startAddress: number | undefined
+  //     let endAddress: number | undefined
 
-      if (parts.length > 0) {
-        // Ensure parts are sorted by index before calculating addresses
-        const sortedParts = [...parts].sort((a, b) => {
-          const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-          const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-          return indexA - indexB
-        })
+  //     if (parts.length > 0) {
+  //       // Parts are already sorted when assigned to blockParts, no need to sort again
+  //       // Calculate START as minimum location
+  //       const locations = parts
+  //         .map(part => part.location)
+  //         .filter(loc => loc !== null && loc !== undefined)
 
-        // Calculate START as minimum location
-        const locations = sortedParts
-          .map(part => part.location)
-          .filter(loc => loc !== null && loc !== undefined)
+  //       // Calculate END as maximum (location + size)
+  //       const endAddresses = parts
+  //         .map(part => part.location + part.size)
+  //         .filter(addr => !isNaN(addr))
 
-        // Calculate END as maximum (location + size)
-        const endAddresses = sortedParts
-          .map(part => part.location + part.size)
-          .filter(addr => !isNaN(addr))
+  //       if (locations.length > 0) {
+  //         startAddress = Math.min(...locations)
+  //       }
 
-        if (locations.length > 0) {
-          startAddress = Math.min(...locations)
-        }
+  //       if (endAddresses.length > 0) {
+  //         endAddress = Math.max(...endAddresses)
+  //       }
 
-        if (endAddresses.length > 0) {
-          endAddress = Math.max(...endAddresses)
-        }
+  //     }
 
-      }
-
-      return {
-        ...block,
-        startAddress,
-        endAddress,
-        parts
-      }
-    })
-  }, [data, blockParts, dataReady])
+  //     return {
+  //       ...block,
+  //       startAddress,
+  //       endAddress,
+  //       parts
+  //     }
+  //   })
+  // }, [blocks])
 
   const blocksByBank = useMemo(() => {
     const banks: { [bank: number]: BlockWithAddresses[] } = {}
@@ -498,11 +536,12 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     return blocksByBank[currentBank] || []
   }, [blocksByBank, currentBank])
 
-  // Convert blocks and parts to unified grid rows
-  const convertToGridRows = useCallback((blocks: BlockWithAddresses[]): GridRow[] => {
+  // Cache grid rows - only recompute when dependencies change
+  // This eliminates the performance issue of converting data on every render
+  const gridRows = useMemo((): GridRow[] => {
     const rows: GridRow[] = []
 
-    blocks.forEach(block => {
+    currentBankBlocks.forEach(block => {
       // Add block row
       const blockRow: BlockGridRow = {
         id: block.id,
@@ -530,7 +569,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
       // Add part rows if block is expanded
       if (expandedBlocks.has(block.id)) {
-        const parts = blockParts[block.id] || []
+        const parts = block.parts || []
         parts.forEach(part => {
           // Calculate end value from location + size
           const calculatedEnd = part.location + part.size
@@ -561,7 +600,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     })
 
     return rows
-  }, [blockParts, expandedBlocks, dirtyRows])
+  }, [currentBankBlocks, expandedBlocks, dirtyRows])
 
   // Inline editing functions
   const startCellEdit = useCallback((rowId: string, fieldKey: string, currentValue: any) => {
@@ -569,19 +608,33 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     setEditingCells(prev => new Set([...prev, cellKey]))
 
     // Store original value if not already stored
-    if (!originalData[rowId]) {
-      const currentRow = convertToGridRows(currentBankBlocks).find(row => row.id === rowId)
-      if (currentRow) {
-        setOriginalData(prev => ({ ...prev, [rowId]: currentRow }))
+    // CRITICAL: Only store original data once per row to preserve the true original state
+    // We must capture the CURRENT state of the row including any calculated values from editingData
+    // If we already have originalData for this row, don't overwrite it
+    setOriginalData(prev => {
+      if (prev[rowId]) {
+        return prev // Already have original data, don't overwrite
       }
-    }
+
+      // CRITICAL FIX: Build the original data from the CURRENT state, not from stale gridRows
+      // This ensures we capture calculated values (like size = end - location) that exist in editingData
+      const currentRow = gridRows.find(row => row.id === rowId)
+      if (currentRow) {
+        // Merge the current row with any existing editingData to capture calculated values
+        const currentEditedData = editingData[rowId] || {}
+        const mergedRow = { ...currentRow, ...currentEditedData }
+        return { ...prev, [rowId]: mergedRow }
+      }
+      return prev
+    })
 
     // Initialize editing data with current value
+    // CRITICAL: Use the currentValue parameter which already prefers editingData over row data
     setEditingData(prev => ({
       ...prev,
       [rowId]: { ...prev[rowId], [fieldKey]: currentValue }
     }))
-  }, [convertToGridRows, currentBankBlocks, originalData])
+  }, [gridRows, editingData])
 
   const stopCellEdit = useCallback((rowId: string, fieldKey: string) => {
     const cellKey = `${rowId}:${fieldKey}`
@@ -616,7 +669,6 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     if (!rowData) return true
 
     const errors: Record<string, string> = {}
-    const gridRows = convertToGridRows(currentBankBlocks)
     const row = gridRows.find(r => r.id === rowId)
     if (!row) return false
 
@@ -633,7 +685,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
     setValidationErrors(prev => ({ ...prev, ...errors }))
     return Object.keys(errors).length === 0
-  }, [editingData, convertToGridRows, currentBankBlocks, editableFields])
+  }, [editingData, gridRows, editableFields])
 
   const saveRow = useCallback(async (rowId: string) => {
     if (!user?.id || !validateRow(rowId)) {
@@ -643,7 +695,6 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     const rowData = editingData[rowId]
     if (!rowData) return true
 
-    const gridRows = convertToGridRows(currentBankBlocks)
     const row = gridRows.find(r => r.id === rowId)
     if (!row) return false
 
@@ -681,23 +732,27 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
           if (error) throw new Error(error.message)
 
           if (data) {
-            // Replace temporary part with real part in local state
-            setBlockParts(prev => {
-              const updated = { ...prev }
+            // Replace temporary part with real part in local state (immutable update)
+            setBlocksWithAddresses(prev => {
               const blockId = (row as PartGridRow).blockId
-              if (updated[blockId]) {
-                const tempIndex = updated[blockId].findIndex(part => part.id === rowId)
-                if (tempIndex !== -1) {
-                  updated[blockId][tempIndex] = data
-                  // Re-sort parts by index
-                  updated[blockId].sort((a, b) => {
-                    const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-                    const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-                    return indexA - indexB
-                  })
+              return prev.map(block => {
+                if (block.id === blockId && block.parts) {
+                  const tempIndex = block.parts.findIndex(part => part.id === rowId)
+                  if (tempIndex !== -1) {
+                    // Create new parts array with replaced part (immutable update)
+                    const newParts = [...block.parts]
+                    newParts[tempIndex] = data
+                    const updatedBlock = {
+                      ...block,
+                      parts: newParts
+                    }
+                    // Re-sort parts after replacing temporary part
+                    handlePartChange(updatedBlock)
+                    return updatedBlock
+                  }
                 }
-              }
-              return updated
+                return block
+              })
             })
           }
         } else {
@@ -712,22 +767,27 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
           const { error } = await db.blockParts.update(rowId, updates, user.id)
           if (error) throw new Error(error.message)
 
-          // Update local blockParts state
-          setBlockParts(prev => {
-            const updated = { ...prev }
-            Object.keys(updated).forEach(blockId => {
-              const partIndex = updated[blockId].findIndex(part => part.id === rowId)
-              if (partIndex !== -1) {
-                updated[blockId][partIndex] = { ...updated[blockId][partIndex], ...updates }
-                // Re-sort parts by index
-                updated[blockId].sort((a, b) => {
-                  const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-                  const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-                  return indexA - indexB
-                })
+          // Update local blockParts state (immutable update)
+          setBlocksWithAddresses(prev => {
+            const blockId = (row as PartGridRow).blockId
+            return prev.map(block => {
+              if (block.id === blockId && block.parts) {
+                const partIndex = block.parts.findIndex(part => part.id === rowId)
+                if (partIndex !== -1) {
+                  // Create new parts array with updated part (immutable update)
+                  const newParts = [...block.parts]
+                  newParts[partIndex] = { ...block.parts[partIndex], ...updates }
+                  const updatedBlock = {
+                    ...block,
+                    parts: newParts
+                  }
+                  // Re-sort parts after update (index or location may have changed)
+                  handlePartChange(updatedBlock)
+                  return updatedBlock
+                }
               }
+              return block
             })
-            return updated
           })
         }
       }
@@ -779,19 +839,26 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
         return newSet
       })
     }
-  }, [user?.id, validateRow, editingData, convertToGridRows, currentBankBlocks])
+  }, [user?.id, validateRow, editingData, gridRows])
 
-  const cancelRow = useCallback((rowId: string) => {
+  const cancelRow = useCallback((rowId: string, blockId: string) => {
     const isNewPart = rowId.startsWith('temp-')
 
     if (isNewPart) {
-      // Remove temporary part from local state
-      setBlockParts(prev => {
-        const updated = { ...prev }
-        Object.keys(updated).forEach(blockId => {
-          updated[blockId] = updated[blockId].filter(part => part.id !== rowId)
+      // Remove temporary part from local state (immutable update)
+      setBlocksWithAddresses(prev => {
+        return prev.map(block => {
+          if (block.id === blockId && block.parts) {
+            // Create new block with filtered parts array (immutable update)
+            const updatedBlock = {
+              ...block,
+              parts: block.parts.filter(part => part.id !== rowId)
+            }
+            handlePartChange(updatedBlock)
+            return updatedBlock
+          }
+          return block
         })
-        return updated
       })
     }
 
@@ -839,7 +906,6 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
   // Keyboard navigation
   const getEditableCells = useCallback((): string[] => {
-    const gridRows = convertToGridRows(currentBankBlocks)
     const cells: string[] = []
 
     gridRows.forEach(row => {
@@ -851,7 +917,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     })
 
     return cells
-  }, [convertToGridRows, currentBankBlocks, editableFields])
+  }, [gridRows, editableFields])
 
   const navigateToCell = useCallback((direction: 'next' | 'prev', currentCellKey: string) => {
     const cells = getEditableCells()
@@ -876,15 +942,14 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
       // If it's not already in edit mode, start editing
       if (!editingCells.has(nextCellKey)) {
-        const gridRows = convertToGridRows(currentBankBlocks)
-        const row = gridRows.find(r => r.id === rowId)
+        const row = editingData[rowId] ?? gridRows.find(r => r.id === rowId)
         if (row) {
           const currentValue = (row as any)[fieldKey]
           startCellEdit(rowId, fieldKey, currentValue)
         }
       }
     }
-  }, [getEditableCells, editingCells, convertToGridRows, currentBankBlocks, startCellEdit])
+  }, [getEditableCells, editingCells, gridRows, editingData, startCellEdit])
 
   const handleCellKeyDown = useCallback((event: React.KeyboardEvent, rowId: string, fieldKey: string) => {
     const cellKey = `${rowId}:${fieldKey}`
@@ -922,86 +987,80 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     }
   }, [navigateToCell, stopCellEdit])
 
+  // Helper functions for autocomplete
+  const extractAlphanumericPortion = useCallback((value: string): string => {
+    // Remove leading pointer markers (*, &, etc.) to get the alphanumeric portion
+    return value.replace(/^[*&]+/, '')
+  }, [])
+
+  const getFilteredOptions = useCallback((inputValue: string, options: { id: string; name: string }[]): { id: string; name: string }[] => {
+    if (!inputValue) return options
+
+    // Extract alphanumeric portion (ignore leading pointer markers)
+    const searchText = extractAlphanumericPortion(inputValue).toLowerCase()
+
+    // Filter options based on alphanumeric portion
+    return options.filter(opt => opt.name.toLowerCase().includes(searchText))
+  }, [extractAlphanumericPortion])
+
   // Cell rendering functions
   const renderEditableCell = useCallback((row: GridRow, field: EditableField) => {
     const cellKey = `${row.id}:${field.key}`
     const isEditing = editingCells.has(cellKey)
+    // CRITICAL: Always prefer editingData over row data to preserve unsaved changes
+    // This ensures that when gridRows is recalculated (which happens on every dirtyRows change),
+    // we don't lose the user's edits by falling back to stale row data
     const currentValue = editingData[row.id]?.[field.key] ?? (row as any)[field.key]
     const error = validationErrors[cellKey]
 
     const handleClick = () => {
       if (!isEditing) {
+        // Use currentValue which already prefers editingData over row data
         startCellEdit(row.id, field.key, currentValue)
       }
     }
 
     const handleBlur = () => {
       stopCellEdit(row.id, field.key)
+    }
 
-      // For part rows, calculate dependent fields when location, size, or end changes
+    const handleChange = (value: any) => {
+      // First update the field being edited
+      updateCellValue(row.id, field.key, value)
+
+      // For part rows, calculate dependent fields immediately on change
       if (row.rowType === 'part') {
+        // CRITICAL: Use editingData for calculations, not row data
+        // This ensures we use the latest edited values, not stale database values
         const currentData = editingData[row.id] || {}
-        const location = currentData.location ?? (row as PartGridRow).location
-        const size = currentData.size ?? (row as PartGridRow).size
-        const end = currentData.end ?? (location + size)
+
+        // When location changes, recalculate end = location + size
+        if (field.key === 'location') {
+          const size = currentData.size ?? (row as PartGridRow).size
+          if (typeof value === 'number' && typeof size === 'number') {
+            updateCellValue(row.id, 'end', value + size)
+          }
+        }
 
         // When size changes, recalculate end = location + size
-        if (field.key === 'size' && typeof size === 'number' && typeof location === 'number') {
-          const calculatedEnd = location + size
-          setEditingData(prev => ({
-            ...prev,
-            [row.id]: {
-              ...prev[row.id],
-              end: calculatedEnd
-            }
-          }))
-
-          // Mark row as dirty if not already
-          if (!dirtyRows.has(row.id)) {
-            setDirtyRows(prev => new Set([...prev, row.id]))
+        if (field.key === 'size') {
+          const location = currentData.location ?? (row as PartGridRow).location
+          if (typeof value === 'number' && typeof location === 'number') {
+            updateCellValue(row.id, 'end', location + value)
           }
         }
 
         // When end changes, recalculate size = end - location
-        if (field.key === 'end' && typeof end === 'number' && typeof location === 'number') {
-          const calculatedSize = end - location
-          if (calculatedSize >= 0) {
-            setEditingData(prev => ({
-              ...prev,
-              [row.id]: {
-                ...prev[row.id],
-                size: calculatedSize
-              }
-            }))
-
-            // Mark row as dirty if not already
-            if (!dirtyRows.has(row.id)) {
-              setDirtyRows(prev => new Set([...prev, row.id]))
+        if (field.key === 'end') {
+          const location = currentData.location ?? (row as PartGridRow).location
+          if (typeof value === 'number' && typeof location === 'number') {
+            const calculatedSize = value - location
+            if (calculatedSize >= 0) {
+              updateCellValue(row.id, 'size', calculatedSize)
             }
-          }
-        }
-
-        // When location changes, recalculate end = location + size
-        if (field.key === 'location' && typeof location === 'number' && typeof size === 'number') {
-          const calculatedEnd = location + size
-          setEditingData(prev => ({
-            ...prev,
-            [row.id]: {
-              ...prev[row.id],
-              end: calculatedEnd
-            }
-          }))
-
-          // Mark row as dirty if not already
-          if (!dirtyRows.has(row.id)) {
-            setDirtyRows(prev => new Set([...prev, row.id]))
           }
         }
       }
-    }
-
-    const handleChange = (value: any) => {
-      updateCellValue(row.id, field.key, value)
     }
 
     if (isEditing) {
@@ -1031,17 +1090,12 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
             <input
               type="text"
               value={typeof currentValue === 'number'
-                ? currentValue.toString(16).toUpperCase().padStart(4, '0')
+                ? currentValue.toString(16).toUpperCase().padStart(field.key === 'size' ? 4 : 6, '0')
                 : currentValue || ''}
               onChange={(e) => {
-                const hexValue = e.target.value.replace(/^0x/i, '')
-                if (/^[0-9A-Fa-f]*$/.test(hexValue) && hexValue !== '') {
-                  handleChange(parseInt(hexValue, 16))
-                } else if (hexValue === '') {
-                  handleChange(null)
-                } else {
-                  handleChange(e.target.value) // Keep invalid input for validation
-                }
+                const hexValue = e.target.value.replace(/[^0-9A-Fa-f]/g, '')
+                if (hexValue !== '') handleChange(parseInt(hexValue, 16))
+                else handleChange(null)
               }}
               onBlur={handleBlur}
               onKeyDown={(e) => handleCellKeyDown(e, row.id, field.key)}
@@ -1112,13 +1166,141 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
               data-cell-key={cellKey}
             >
               <option value="">Select...</option>
-              {field.options?.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {field.options && field.options.map(option => (
+                <option key={option.id} value={option.id} selected={option.id === currentValue || option.name === currentValue}>
+                  {option.name}
                 </option>
               ))}
             </select>
           )}
+
+          {field.type === 'autocomplete' && (() => {
+            const isDropdownOpen = autocompleteOpen.has(cellKey)
+            const filteredOptions = getFilteredOptions(currentValue || '', field.options || [])
+            const selectedIndex = autocompleteSelectedIndex[cellKey] ?? 0
+
+            const handleAutocompleteKeyDown = (e: React.KeyboardEvent) => {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setAutocompleteSelectedIndex(prev => ({
+                  ...prev,
+                  [cellKey]: Math.min((prev[cellKey] ?? 0) + 1, filteredOptions.length - 1)
+                }))
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setAutocompleteSelectedIndex(prev => ({
+                  ...prev,
+                  [cellKey]: Math.max((prev[cellKey] ?? 0) - 1, 0)
+                }))
+              } else if (e.key === 'Enter' && isDropdownOpen && filteredOptions.length > 0) {
+                e.preventDefault()
+                const selected = filteredOptions[selectedIndex]
+                if (selected) {
+                  // Preserve pointer markers from current value
+                  const pointerMarkers = (currentValue || '').match(/^[*&]+/)?.[0] || ''
+                  handleChange(pointerMarkers + selected.name)
+                  setAutocompleteOpen(prev => {
+                    const newSet = new Set(prev)
+                    newSet.delete(cellKey)
+                    return newSet
+                  })
+                }
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                setAutocompleteOpen(prev => {
+                  const newSet = new Set(prev)
+                  newSet.delete(cellKey)
+                  return newSet
+                })
+              } else {
+                handleCellKeyDown(e, row.id, field.key)
+              }
+            }
+
+            const handleAutocompleteFocus = () => {
+              setAutocompleteOpen(prev => new Set([...prev, cellKey]))
+              setAutocompleteSelectedIndex(prev => ({ ...prev, [cellKey]: 0 }))
+            }
+
+            const handleAutocompleteBlur = () => {
+              // Delay to allow click events to fire
+              setTimeout(() => {
+                setAutocompleteOpen(prev => {
+                  const newSet = new Set(prev)
+                  newSet.delete(cellKey)
+                  return newSet
+                })
+                handleBlur()
+              }, 200)
+            }
+
+            const handleOptionClick = (option: { id: string; name: string }) => {
+              // Preserve pointer markers from current value
+              const pointerMarkers = (currentValue || '').match(/^[*&]+/)?.[0] || ''
+              handleChange(pointerMarkers + option.name)
+              setAutocompleteOpen(prev => {
+                const newSet = new Set(prev)
+                newSet.delete(cellKey)
+                return newSet
+              })
+            }
+
+            return (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={currentValue || ''}
+                  onChange={(e) => {
+                    handleChange(e.target.value)
+                    setAutocompleteOpen(prev => new Set([...prev, cellKey]))
+                    setAutocompleteSelectedIndex(prev => ({ ...prev, [cellKey]: 0 }))
+                  }}
+                  onFocus={handleAutocompleteFocus}
+                  onBlur={handleAutocompleteBlur}
+                  onKeyDown={handleAutocompleteKeyDown}
+                  className={clsx(
+                    'w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2',
+                    error
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                      : 'border-blue-300 focus:border-blue-500 focus:ring-blue-500'
+                  )}
+                  placeholder={field.placeholder || 'Type to search...'}
+                  autoFocus
+                  data-cell-key={cellKey}
+                  role="combobox"
+                  aria-expanded={isDropdownOpen}
+                  aria-autocomplete="list"
+                  aria-controls={`${cellKey}-listbox`}
+                />
+
+                {isDropdownOpen && filteredOptions.length > 0 && (
+                  <div
+                    id={`${cellKey}-listbox`}
+                    role="listbox"
+                    className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                  >
+                    {filteredOptions.map((option, index) => (
+                      <div
+                        key={option.id}
+                        role="option"
+                        aria-selected={index === selectedIndex}
+                        onClick={() => handleOptionClick(option)}
+                        onMouseEnter={() => setAutocompleteSelectedIndex(prev => ({ ...prev, [cellKey]: index }))}
+                        className={clsx(
+                          'px-3 py-2 cursor-pointer text-sm',
+                          index === selectedIndex
+                            ? 'bg-blue-100 text-blue-900'
+                            : 'hover:bg-gray-100'
+                        )}
+                      >
+                        {option.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {error && (
             <div className="absolute top-full left-0 z-10 mt-1 text-xs text-red-600 bg-white border border-red-300 rounded px-2 py-1 shadow-lg">
@@ -1131,10 +1313,10 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
     // Display mode
     const displayValue = (() => {
-      if (currentValue === null || currentValue === undefined) return '—'
+      if (currentValue === null || currentValue === undefined || currentValue === '') return '—'
 
       if (field.type === 'hex' && typeof currentValue === 'number') {
-        return (currentValue & 0xFFFF).toString(16).toUpperCase().padStart(4, '0')
+        return currentValue.toString(16).toUpperCase().padStart(6, '0')
       }
 
       if (field.type === 'boolean') {
@@ -1148,7 +1330,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       <div
         onClick={handleClick}
         className={clsx(
-          'cursor-pointer hover:bg-gray-50 rounded',
+          'cursor-pointer hover:bg-gray-50 rounded w-full inline-block',
           (field.key === 'location' || field.key === 'size' || field.key === 'end') ? 'font-mono' : '',
           error && 'bg-red-50'
         )}
@@ -1158,7 +1340,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
         {displayValue}
       </div>
     )
-  }, [editingCells, editingData, validationErrors, startCellEdit, stopCellEdit, updateCellValue, handleCellKeyDown])
+  }, [editingCells, editingData, validationErrors, startCellEdit, stopCellEdit, updateCellValue, handleCellKeyDown, autocompleteOpen, autocompleteSelectedIndex, getFilteredOptions])
 
   const handlePreviousBank = useCallback(() => {
     const currentIndex = availableBanks.indexOf(currentBank)
@@ -1192,17 +1374,26 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
 
 
-  const handleAddPart = (block: BlockWithAddresses) => {
+  const handleAddPart = useCallback((blockId: string) => {
     if (!user?.id) {
       console.error('User not authenticated')
       return
     }
 
+    const block = blocksWithAddresses.find(block => block.id === blockId)
+    if (!block) {
+      console.error('Block not found')
+      return
+    }
+
     // Calculate next location based on existing parts
-    const existingParts = blockParts[block.id] || []
+    const existingParts = block.parts || []
     const nextLocation = existingParts.length > 0
       ? Math.max(...existingParts.map(p => p.location + p.size))
       : 0
+
+    // Calculate next part index for naming (hexadecimal format)
+    const partName = `part_${nextLocation.toString(16).toUpperCase().padStart(6, '0')}`
 
     // Generate a temporary ID for the new part
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
@@ -1210,7 +1401,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     // Create new part as a temporary object
     const newPart: BlockPart = {
       id: tempId,
-      name: '',
+      name: partName,
       location: nextLocation,
       size: 0,
       type: 'Code',
@@ -1224,22 +1415,20 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       deletedBy: null
     }
 
-    // Add to local state without persisting to database
-    setBlockParts(prev => {
-      const updated = { ...prev }
-      if (!updated[block.id]) {
-        updated[block.id] = []
-      }
-      updated[block.id] = [...updated[block.id], newPart]
-
-      // Sort parts by index
-      updated[block.id].sort((a, b) => {
-        const indexA = a.index !== null && a.index !== undefined ? a.index : 999999
-        const indexB = b.index !== null && b.index !== undefined ? b.index : 999999
-        return indexA - indexB
+    // Add to local state without persisting to database (immutable update)
+    setBlocksWithAddresses(prev => {
+      return prev.map(block => {
+        if (block.id === blockId) {
+          // Create new block with new parts array (immutable update)
+          const updatedBlock = {
+            ...block,
+            parts: [...(block.parts || []), newPart]
+          }
+          handlePartChange(updatedBlock)
+          return updatedBlock
+        }
+        return block
       })
-
-      return updated
     })
 
     // Mark the new part as dirty
@@ -1249,7 +1438,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
     setEditingData(prev => ({
       ...prev,
       [tempId]: {
-        name: '',
+        name: partName,
         location: nextLocation,
         size: 0,
         end: nextLocation + 0, // Calculated: location + size
@@ -1260,7 +1449,16 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
     // Expand the block to show the new part
     setExpandedBlocks(prev => new Set([...prev, block.id]))
-  }
+
+    // Auto-focus the "end" field after the part is rendered
+    setTimeout(() => {
+      const endCellKey = `${tempId}:end`
+      const endCell = document.querySelector(`[data-cell-key="${endCellKey}"]`) as HTMLElement
+      if (endCell) {
+        endCell.click() // Trigger edit mode
+      }
+    }, 100)
+  }, [blocksWithAddresses, user, handlePartChange])
 
 
 
@@ -1278,13 +1476,20 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
         throw new Error(error.message)
       }
 
-      // Update local state
-      setBlockParts(prev => {
-        const updated = { ...prev }
-        if (updated[blockId]) {
-          updated[blockId] = updated[blockId].filter(part => part.id !== partId)
-        }
-        return updated
+      // Update local state (immutable update)
+      setBlocksWithAddresses(prev => {
+        return prev.map(block => {
+          if (block.id === blockId && block.parts) {
+            // Create new block with filtered parts array (immutable update)
+            const updatedBlock = {
+              ...block,
+              parts: block.parts.filter(part => part.id !== partId)
+            }
+            handlePartChange(updatedBlock)
+            return updatedBlock
+          }
+          return block
+        })
       })
     } catch (err) {
       console.error('Error deleting part:', err)
@@ -1323,7 +1528,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
       return
     }
 
-    if (data.length === 0) {
+    if (blocksWithAddresses.length === 0) {
       showNotification(
         'warning',
         'No Blocks to Build',
@@ -1544,7 +1749,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
           {project && (
             <button
               onClick={handleBuildProject}
-              disabled={isBuilding || data.length === 0}
+              disabled={isBuilding || blocksWithAddresses.length === 0}
               className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Build project and generate assembly code"
             >
@@ -1588,7 +1793,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {convertToGridRows(currentBankBlocks).map((row, index) => {
+              {gridRows.map((row, index) => {
                 const isDirty = dirtyRows.has(row.id)
                 const isSaving = savingRows.has(row.id)
                 const isBlock = row.rowType === 'block'
@@ -1702,7 +1907,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
                               <Check className={clsx("h-4 w-4", isSaving && "animate-pulse")} />
                             </button>
                             <button
-                              onClick={() => cancelRow(row.id)}
+                              onClick={() => cancelRow(row.id, (row as PartGridRow).blockId)}
                               disabled={isSaving}
                               className={clsx(
                                 "text-gray-600 hover:text-gray-900",
@@ -1717,7 +1922,7 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
 
                         {isBlock && (
                           <button
-                            onClick={() => handleAddPart(row as BlockWithAddresses)}
+                            onClick={() => handleAddPart((row as BlockGridRow).id)}
                             className="text-green-600 hover:text-green-900"
                             title="Add Part"
                           >
@@ -1753,163 +1958,6 @@ export default function BlocksDataTable({ data, projectId, project, onBuildCompl
           </table>
         </div>
       </div>
-      {/* <DataTable
-        {...props}
-        data={currentBankBlocks}
-        columns={enhancedColumns}
-        loading={props.loading || partsLoading || !dataReady}
-        error={props.error || partsError}
-        emptyMessage={`No blocks found in Bank 0x${currentBank.toString(16).toUpperCase().padStart(2, '0')}. Blocks may exist in other banks.`}
-        expandedRows={expandedBlocks}
-        renderExpandedContent={(block: BlockWithAddresses) => {
-          const parts = block.parts || []
-
-          return (
-            <div className="bg-gray-50">
-              <div className="overflow-visible">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">START</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SIZE</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">END</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {/* Existing Parts *\/}
-                    {parts.sort((a, b) => {
-                      const orderA = a.index ?? 0;
-                      const orderB = b.index ?? 0;
-                      if (orderA !== orderB) return orderA - orderB;
-                      return a.location - b.location;
-                    }).map((part, index) => {
-                      const isEditing = editingPartId === part.id
-                      return (
-                        <tr key={part.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {isEditing ? renderEditPartEditableCell('name', 'text') : (
-                              <span className="text-sm text-gray-900">{part.name}</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {isEditing ? renderEditPartEditableCell('location', 'hex') : (
-                              <span className="text-sm font-mono text-gray-900">
-                                0x{part.location.toString(16).toUpperCase().padStart(6, '0')}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {isEditing ? renderEditPartEditableCell('size', 'hex') : (
-                              <span className="text-sm font-mono text-gray-900">
-                                0x{part.size.toString(16).toUpperCase().padStart(4, '0')}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-sm font-mono text-gray-900">
-                            0x{(part.location + part.size).toString(16).toUpperCase().padStart(6, '0')}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {isEditing ? renderEditPartEditableCell('type', 'text') : (
-                              <span className="text-sm text-gray-900">{part.type}</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {isEditing ? renderEditPartEditableCell('index', 'number') : (
-                              <span className="text-sm text-gray-900">{part.index || '-'}</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
-                            {isEditing ? (
-                              <div className="flex items-center justify-end space-x-2">
-                                <button
-                                  onClick={handleSaveEditPart}
-                                  className="text-green-600 hover:text-green-900"
-                                  title="Save"
-                                >
-                                  <Check className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={handleCancelEditPart}
-                                  className="text-red-600 hover:text-red-900"
-                                  title="Cancel"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end space-x-2">
-                                <button
-                                  onClick={() => handleEditPart(part)}
-                                  className="text-blue-600 hover:text-blue-900"
-                                  title="Edit"
-                                >
-                                  <Edit2 className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePart(part.id, part.blockId)}
-                                  className="text-red-600 hover:text-red-900"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-
-                    {/* Always show Add Form Row at the bottom *\/}
-                    <tr className="bg-blue-50">
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {renderPartEditableCell(block.id, 'name', 'text')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {renderPartEditableCell(block.id, 'location', 'hex')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {renderPartEditableCell(block.id, 'size', 'hex')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-400">
-                        {/* END address - calculated automatically *\/}
-                        —
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {renderPartEditableCell(block.id, 'type', 'text')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {renderPartEditableCell(block.id, 'index', 'number')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button
-                            onClick={() => handleSaveAddPart(block.id)}
-                            className="text-green-600 hover:text-green-900"
-                            title="Save"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleCancelAddPart(block.id)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Clear"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )
-        }}
-      /> */}
 
       {/* ROM File Modal */}
       <RomPathModal

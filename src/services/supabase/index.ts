@@ -21,6 +21,7 @@ import { instructionGroups } from './instruction-groups'
 import { instructionCodes } from './instruction-codes'
 import { vectors } from './vectors'
 import { external } from './external'
+import { platformTypes } from './platform-types'
 
 // Reconstruct the db object with the same structure as before
 export const db = {
@@ -46,7 +47,7 @@ export const db = {
   instructionCodes,
   vectors,
   external,
-  
+  platformTypes,
   // Alias for consistency with other naming patterns
   stringTypes: {
     async getByProject(projectId: string) {
@@ -95,5 +96,6 @@ export {
   instructionCodes,
   vectors,
   external,
+  platformTypes,
 }
 

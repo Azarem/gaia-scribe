@@ -112,7 +112,7 @@ export default function ProjectSectionPage() {
 
     const loadSectionData = async () => {
       const dbMethods = getDbMethods()
-      if (!dbMethods) return
+      if (!dbMethods || dbMethods === db.blocks) return
 
       try {
         setSectionLoading(true)
@@ -359,7 +359,7 @@ export default function ProjectSectionPage() {
           />
         ) : section === 'blocks' ? (
           <BlocksDataTable
-            data={sectionData}
+            //data={sectionData}
             projectId={id || ''}
             project={project || undefined}
             columns={getColumnConfig() as any}
