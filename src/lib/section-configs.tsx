@@ -116,6 +116,14 @@ export const filesColumns: ColumnDefinition<File>[] = [
     sortable: true,
     editable: true,
     type: 'boolean'
+  },
+  {
+    key: 'actions',
+    label: 'Actions',
+    sortable: false,
+    editable: false,
+    width: '80px',
+    render: () => null // Will be handled by FilesDataTable
   }
 ]
 

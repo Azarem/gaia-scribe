@@ -346,6 +346,7 @@ export default function ProjectSectionPage() {
         {section === 'files' ? (
           <FilesDataTable
             data={sectionData}
+            project={project || undefined}
             columns={getColumnConfig() as any}
             loading={sectionLoading}
             error={sectionError}

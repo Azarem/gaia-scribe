@@ -256,8 +256,8 @@ export class ImportOrchestrator {
       if (internalData.files && internalData.files.length > 0) {
         console.log(`Inserting ${internalData.files.length} files...`)
         const filesToInsert = internalData.files.map((file: any) => ({
-          ...file,
           id: createId(),
+          ...file,
           projectId: newProject.id,
           createdBy: userId
         }))

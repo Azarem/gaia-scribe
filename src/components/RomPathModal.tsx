@@ -1,15 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
 import { Upload, AlertCircle, File, Trash2 } from 'lucide-react'
-import { decodeBase64, encodeBase64 } from '@gaialabs/shared'
-
-// ROM file metadata for persistence
-interface RomFileMetadata {
-  name: string
-  size: number
-  lastModified: number
-  data: string // Base64 encoded file data
-}
+import { romCacheDB } from '../lib/rom-cache-db'
 
 interface RomPathModalProps {
   isOpen: boolean
@@ -17,61 +9,87 @@ interface RomPathModalProps {
   onConfirm: (file: File, fileData: Uint8Array) => void
   title?: string
   description?: string
+  baseRomId?: string | null // Optional BaseRomID for cache key
 }
 
-// ROM file manager for localStorage persistence
+// ROM file manager using IndexedDB for large file support
 class RomFileManager {
-  private static readonly STORAGE_KEY = 'scribe_rom_file'
+  /**
+   * Save ROM file data to IndexedDB with BaseRomID-specific key
+   * Supports large files (up to 32MB+) without base64 encoding overhead
+   */
+  static async saveRomFile(file: File, data: Uint8Array, baseRomId?: string | null): Promise<void> {
+    if (!baseRomId) {
+      console.warn('Cannot cache ROM without BaseRomID')
+      return
+    }
 
-  static saveRomFile(file: File, data: Uint8Array): void {
     try {
-      const metadata: RomFileMetadata = {
-        name: file.name,
-        size: file.size,
-        lastModified: file.lastModified,
-        data: encodeBase64(data) // Convert to base64
-      }
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(metadata))
+      await romCacheDB.saveRom(baseRomId, file, data)
     } catch (error) {
-      console.warn('Failed to save ROM file to localStorage:', error)
+      console.warn('Failed to save ROM file to cache:', error)
     }
   }
 
-  static getSavedRomFile(): { file: File; data: Uint8Array } | null {
+  /**
+   * Get saved ROM file data from IndexedDB for a specific BaseRomID
+   */
+  static async getSavedRomFile(baseRomId?: string | null): Promise<{ file: File; data: Uint8Array } | null> {
+    if (!baseRomId) {
+      return null
+    }
+
     try {
-      const saved = localStorage.getItem(this.STORAGE_KEY)
-      if (!saved) return null
-
-      const metadata: RomFileMetadata = JSON.parse(saved)
-
-      // Convert base64 back to Uint8Array
-      const data = decodeBase64(metadata.data)
-
-      // Create a File object from the metadata
-      const file = new (File as any)([data], metadata.name, {
-        lastModified: metadata.lastModified
-      })
-
-      return { file, data }
+      return await romCacheDB.getRom(baseRomId)
     } catch (error) {
-      console.warn('Failed to load ROM file from localStorage:', error)
+      console.warn('Failed to load ROM file from cache:', error)
       return null
     }
   }
 
-  static clearRomFile(): void {
-    localStorage.removeItem(this.STORAGE_KEY)
+  /**
+   * Clear ROM file data for a specific BaseRomID
+   */
+  static async clearRomFile(baseRomId?: string | null): Promise<void> {
+    if (!baseRomId) {
+      return
+    }
+
+    try {
+      await romCacheDB.deleteRom(baseRomId)
+    } catch (error) {
+      console.warn('Failed to clear ROM file cache:', error)
+    }
   }
 
-  static getSavedRomMetadata(): { name: string; size: number } | null {
-    try {
-      const saved = localStorage.getItem(this.STORAGE_KEY)
-      if (!saved) return null
-
-      const metadata: RomFileMetadata = JSON.parse(saved)
-      return { name: metadata.name, size: metadata.size }
-    } catch (_error) {
+  /**
+   * Get saved ROM metadata (name and size only) for a specific BaseRomID
+   */
+  static async getSavedRomMetadata(baseRomId?: string | null): Promise<{ name: string; size: number } | null> {
+    if (!baseRomId) {
       return null
+    }
+
+    try {
+      return await romCacheDB.getRomMetadata(baseRomId)
+    } catch (error) {
+      console.warn('Failed to load ROM metadata from cache:', error)
+      return null
+    }
+  }
+
+  /**
+   * Check if cached ROM data exists for a specific BaseRomID
+   */
+  static async hasCachedRom(baseRomId?: string | null): Promise<boolean> {
+    if (!baseRomId) {
+      return false
+    }
+
+    try {
+      return await romCacheDB.hasRom(baseRomId)
+    } catch (error) {
+      return false
     }
   }
 }
@@ -81,7 +99,8 @@ export default function RomPathModal({
   onClose,
   onConfirm,
   title = 'Select ROM File',
-  description = 'Please select a ROM file for building the project.'
+  description = 'Please select a ROM file for building the project.',
+  baseRomId
 }: RomPathModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileData, setFileData] = useState<Uint8Array | null>(null)
@@ -90,16 +109,43 @@ export default function RomPathModal({
   const [savedFileInfo, setSavedFileInfo] = useState<{ name: string; size: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load saved ROM file info when modal opens
+  // Auto-load cached ROM data when modal opens if available for this BaseRomID
   useEffect(() => {
-    if (isOpen) {
-      const savedInfo = RomFileManager.getSavedRomMetadata()
-      setSavedFileInfo(savedInfo)
+    if (!isOpen) return
+
+    const loadCachedRom = async () => {
       setError(null)
       setSelectedFile(null)
       setFileData(null)
+
+      if (!baseRomId) {
+        setSavedFileInfo(null)
+        return
+      }
+
+      try {
+        // Check for cached ROM metadata
+        const savedInfo = await RomFileManager.getSavedRomMetadata(baseRomId)
+        setSavedFileInfo(savedInfo)
+
+        // Auto-confirm with cached data if available
+        if (savedInfo) {
+          const cached = await RomFileManager.getSavedRomFile(baseRomId)
+          if (cached) {
+            console.log(`Auto-loading cached ROM for BaseRomID: ${baseRomId}`)
+            // Automatically use cached ROM without showing modal
+            onConfirm(cached.file, cached.data)
+            onClose()
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load cached ROM:', error)
+        setSavedFileInfo(null)
+      }
     }
-  }, [isOpen])
+
+    loadCachedRom()
+  }, [isOpen, baseRomId, onConfirm, onClose])
 
   const validateRomFile = (file: File): boolean => {
     // Check for common ROM file extensions
@@ -161,15 +207,20 @@ export default function RomPathModal({
   }
 
   const handleUseSaved = async () => {
-    const saved = RomFileManager.getSavedRomFile()
-    if (!saved) {
-      setError('No saved ROM file found')
-      return
-    }
+    try {
+      const saved = await RomFileManager.getSavedRomFile(baseRomId)
+      if (!saved) {
+        setError('No saved ROM file found')
+        return
+      }
 
-    setSelectedFile(saved.file)
-    setFileData(saved.data)
-    setError(null)
+      setSelectedFile(saved.file)
+      setFileData(saved.data)
+      setError(null)
+    } catch (error) {
+      setError('Failed to load saved ROM file')
+      console.error('Error loading saved ROM:', error)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -180,10 +231,14 @@ export default function RomPathModal({
 
     // If no file selected but we have a saved file, use that
     if (!fileToUse && savedFileInfo) {
-      const saved = RomFileManager.getSavedRomFile()
-      if (saved) {
-        fileToUse = saved.file
-        dataToUse = saved.data
+      try {
+        const saved = await RomFileManager.getSavedRomFile(baseRomId)
+        if (saved) {
+          fileToUse = saved.file
+          dataToUse = saved.data
+        }
+      } catch (error) {
+        console.error('Error loading saved ROM:', error)
       }
     }
 
@@ -195,8 +250,8 @@ export default function RomPathModal({
     setIsLoading(true)
 
     try {
-      // Save the ROM file for future use
-      RomFileManager.saveRomFile(fileToUse, dataToUse)
+      // Save the ROM file for future use with BaseRomID-specific key
+      await RomFileManager.saveRomFile(fileToUse, dataToUse, baseRomId)
 
       // Call the confirm callback with File and data
       onConfirm(fileToUse, dataToUse)
@@ -217,10 +272,14 @@ export default function RomPathModal({
     onClose()
   }
 
-  const handleClearSaved = () => {
-    RomFileManager.clearRomFile()
-    setSavedFileInfo(null)
-    setError(null)
+  const handleClearSaved = async () => {
+    try {
+      await RomFileManager.clearRomFile(baseRomId)
+      setSavedFileInfo(null)
+      setError(null)
+    } catch (error) {
+      console.error('Error clearing saved ROM:', error)
+    }
   }
 
   const formatFileSize = (bytes: number): string => {

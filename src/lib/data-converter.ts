@@ -233,28 +233,18 @@ function extractCops(coplib: any): Omit<Cop, 'id' | 'projectId' | 'createdAt' | 
  * Extract file definitions from files JSON structure
  * Files structure: { "filename": { size, type, location, compressed?, group?, scene?, upper? } }
  */
-function extractFiles(files: any): Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[] {
+function extractFiles(files: any): Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[] {
   if (!files || typeof files !== 'object') return []
 
-  const fileRecords: Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[] = []
+  const fileRecords: Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[] = []
 
   // Process each file entry in the files object
   Object.entries(files).forEach(([fileName, fileData]: [string, any]) => {
     if (!fileData || typeof fileData !== 'object') return
 
     fileRecords.push({
+      ...fileData,
       name: fileName,
-      location: fileData.location || 0,
-      size: fileData.size || 0,
-      type: fileData.type || 'Unknown',
-      group: fileData.group || null,
-      scene: fileData.scene || null,
-      compressed: fileData.compressed || false,
-      upper: fileData.upper || false,
-      meta: fileData.meta || null,
-      createdBy: '',
-      updatedBy: null,
-      deletedBy: null
     })
   })
 

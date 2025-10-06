@@ -1966,6 +1966,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
         onConfirm={handleRomFileConfirm}
         title="Build Project"
         description="To build the project and generate assembly code, please select your ROM file."
+        baseRomId={project?.gameRomBranchId}
       />
 
       {/* Notification Modal */}
