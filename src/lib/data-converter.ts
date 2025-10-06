@@ -59,7 +59,7 @@ export interface CompleteGameRomData {
 export interface InternalProjectData {
   project: Omit<ScribeProject, 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>
   cops: Omit<Cop, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
-  files: Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
+  files: Omit<File, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'>[]
   blocks: Omit<Block, 'id' | 'projectId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   blockTransforms: Omit<BlockTransform, 'id' | 'blockId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]
   blockParts: Omit<BlockPart, 'id' | 'blockId' | 'createdAt' | 'updatedAt' | 'deletedAt'>[]

@@ -70,9 +70,13 @@ class RomCacheDB {
   async saveRom(baseRomId: string, file: File, data: Uint8Array): Promise<void> {
     try {
       const db = await this.ensureDB()
-      
+
       // Convert Uint8Array to Blob for efficient storage
-      const blob = new Blob([data], { type: 'application/octet-stream' })
+      // Create a new ArrayBuffer copy to satisfy TypeScript's BlobPart type requirements
+      const buffer = new ArrayBuffer(data.length)
+      const view = new Uint8Array(buffer)
+      view.set(data)
+      const blob = new Blob([view], { type: 'application/octet-stream' })
       
       const entry: RomCacheEntry = {
         baseRomId,
