@@ -5,7 +5,7 @@ import { createId } from '@paralleldrive/cuid2'
 export const blockParts = {
   async getByProject(projectId: string) {
     return supabase.from('BlockPart')
-      .select<'*,block:Block!inner(id,projectId,deletedAt)', BlockPart>()
+      .select<'*,block:Block!inner(id,projectId,deletedAt)', BlockPart>('*,block:Block!inner(id,projectId,deletedAt)')
       .eq('block.projectId', projectId)
       .is('deletedAt', null)
       .is('block.deletedAt', null)

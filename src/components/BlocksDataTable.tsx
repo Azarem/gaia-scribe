@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Check, X, Trash2, Hammer, Eye, Plus } from 'lucide-react'
-import DataTable, { type DataTableProps } from './DataTable'
+import { type DataTableProps } from './DataTable'
 import { useAuthStore } from '../stores/auth-store'
 import { useArtifactViewerStore } from '../stores/artifact-viewer-store'
 import { supabase } from '../lib/supabase'
@@ -92,15 +92,15 @@ interface BlocksDataTableProps extends Omit<DataTableProps<BlockWithAddresses>, 
   onBuildComplete?: () => void
 }
 
-export default function BlocksDataTable({ projectId, project, onBuildComplete, columns, ...props }: BlocksDataTableProps) {
+export default function BlocksDataTable({ projectId, project, onBuildComplete }: BlocksDataTableProps) {
   const { user, isAnonymousMode } = useAuthStore()
   const { openPanel } = useArtifactViewerStore()
   const [currentBank, setCurrentBank] = useState<number>(0)
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set())
   const [blocksWithAddresses, setBlocksWithAddresses] = useState<BlockWithAddresses[]>([])
-  const [partsLoading, setPartsLoading] = useState(false)
-  const [partsError, setPartsError] = useState<string | null>(null)
-  const [dataReady, setDataReady] = useState(false)
+  // const [partsLoading, setPartsLoading] = useState(false)
+  // const [partsError, setPartsError] = useState<string | null>(null)
+  // const [dataReady, setDataReady] = useState(false)
   const [typeList, setTypeList] = useState<{ id: string; name: string }[]>([])
 
   // Inline editing state
@@ -244,14 +244,14 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
   // Fetch all BlockParts for the project
   useEffect(() => {
     if (!projectId) {
-      setDataReady(true) // No blocks means we're ready (empty state)
+      //setDataReady(true) // No blocks means we're ready (empty state)
       return
     }
 
     const fetchBlocksAndParts = async () => {
-      setPartsLoading(true)
-      setPartsError(null)
-      setDataReady(false)
+      // setPartsLoading(true)
+      // setPartsError(null)
+      // setDataReady(false)
 
       try {
         const { data: blocks, error: blocksError } = await db.blocks.getByProject(projectId)
@@ -259,8 +259,8 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
 
         if (error || blocksError) {
           console.error('Error fetching block parts:', error || blocksError)
-          setPartsError('Failed to load block parts')
-          setDataReady(true) // Set ready even on error to prevent infinite loading
+          // setPartsError('Failed to load block parts')
+          // setDataReady(true) // Set ready even on error to prevent infinite loading
           return
         }
 
@@ -301,13 +301,13 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
         })
 
         setBlocksWithAddresses(blocksWithParts)
-        setDataReady(true)
+        //setDataReady(true)
       } catch (err) {
         console.error('Error fetching block parts:', err)
-        setPartsError('Failed to load block parts')
-        setDataReady(true)
+        // setPartsError('Failed to load block parts')
+        // setDataReady(true)
       } finally {
-        setPartsLoading(false)
+        //setPartsLoading(false)
       }
     }
 
@@ -1784,48 +1784,48 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
   }, [openPanel, showNotification])
 
   // Enhanced columns with expand functionality
-  const enhancedColumns = useMemo(() => {
-    return columns.map(col => {
-      if (col.key === 'expand') {
-        return {
-          ...col,
-          render: (_value: any, row: BlockWithAddresses) => (
-            <button
-              onClick={() => toggleBlockExpansion(row.id)}
-              className="p-1 hover:bg-gray-100 rounded"
-              title={expandedBlocks.has(row.id) ? 'Collapse' : 'Expand'}
-            >
-              {expandedBlocks.has(row.id) ? (
-                <ChevronDown className="h-4 w-4 text-gray-600" />
-              ) : (
-                <ChevronRightIcon className="h-4 w-4 text-gray-600" />
-              )}
-            </button>
-          )
-        }
-      }
+  // const enhancedColumns = useMemo(() => {
+  //   return columns.map(col => {
+  //     if (col.key === 'expand') {
+  //       return {
+  //         ...col,
+  //         render: (_value: any, row: BlockWithAddresses) => (
+  //           <button
+  //             onClick={() => toggleBlockExpansion(row.id)}
+  //             className="p-1 hover:bg-gray-100 rounded"
+  //             title={expandedBlocks.has(row.id) ? 'Collapse' : 'Expand'}
+  //           >
+  //             {expandedBlocks.has(row.id) ? (
+  //               <ChevronDown className="h-4 w-4 text-gray-600" />
+  //             ) : (
+  //               <ChevronRightIcon className="h-4 w-4 text-gray-600" />
+  //             )}
+  //           </button>
+  //         )
+  //       }
+  //     }
 
-      if (col.key === 'name') {
-        return {
-          ...col,
-          render: (value: any, row: BlockWithAddresses) => (
-            <div className="flex items-center space-x-2">
-              <span className="font-medium">{value}</span>
-              <button
-                onClick={() => handleViewArtifact(row)}
-                className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
-                title="View build artifact"
-              >
-                <Eye className="h-4 w-4" />
-              </button>
-            </div>
-          )
-        }
-      }
+  //     if (col.key === 'name') {
+  //       return {
+  //         ...col,
+  //         render: (value: any, row: BlockWithAddresses) => (
+  //           <div className="flex items-center space-x-2">
+  //             <span className="font-medium">{value}</span>
+  //             <button
+  //               onClick={() => handleViewArtifact(row)}
+  //               className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+  //               title="View build artifact"
+  //             >
+  //               <Eye className="h-4 w-4" />
+  //             </button>
+  //           </div>
+  //         )
+  //       }
+  //     }
 
-      return col
-    })
-  }, [columns, expandedBlocks, handleViewArtifact])
+  //     return col
+  //   })
+  // }, [columns, expandedBlocks, handleViewArtifact])
 
 
   return (
