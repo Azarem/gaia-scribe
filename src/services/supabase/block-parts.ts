@@ -1,11 +1,11 @@
+import { BlockPart } from '@prisma/client'
 import { supabase } from '../../lib/supabase'
 import { createId } from '@paralleldrive/cuid2'
 
 export const blockParts = {
   async getByProject(projectId: string) {
-    return supabase
-      .from('BlockPart')
-      .select('*,block:Block!inner(id,projectId,deletedAt)')
+    return supabase.from('BlockPart')
+      .select<'*,block:Block!inner(id,projectId,deletedAt)', BlockPart>()
       .eq('block.projectId', projectId)
       .is('deletedAt', null)
       .is('block.deletedAt', null)
@@ -13,56 +13,46 @@ export const blockParts = {
   },
 
   async getByBlock(blockId: string) {
-    return supabase
-      .from('BlockPart')
-      .select('*')
+    return supabase.from('BlockPart')
+      .select<'*', BlockPart>()
       .eq('blockId', blockId)
       .is('deletedAt', null)
       .order('index', { ascending: true })
   },
 
   async getById(id: string) {
-    return supabase
-      .from('BlockPart')
+    return supabase.from('BlockPart')
       .select('*')
       .eq('id', id)
       .is('deletedAt', null)
-      .single()
+      .single<BlockPart>()
   },
 
-  async create(part: { name: string; location: number; size: number; type: string; index?: number; blockId: string }, userId: string) {
-    const partId = createId()
-    return (supabase as any)
-      .from('BlockPart')
+  async create(part: Omit<BlockPart, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt' | 'createdBy' | 'updatedBy' | 'deletedBy'> & { id?: string }, userId: string) {
+    if(!part.id) part.id = createId()
+    return supabase.from('BlockPart')
       .insert({
-        id: partId,
-        name: part.name,
-        location: part.location,
-        size: part.size,
-        type: part.type,
-        index: part.index,
-        blockId: part.blockId,
+        ...part,
         createdBy: userId,
       })
       .select()
-      .single()
+      .single<BlockPart>()
   },
 
   async update(id: string, updates: { name?: string; location?: number; size?: number; type?: string; index?: number }, userId: string) {
-    return (supabase as any)
-      .from('BlockPart')
+    return supabase.from('BlockPart')
       .update({
         ...updates,
-        updatedBy: userId,
+        updatedAt: new Date().toISOString(),
+        updatedBy: userId
       })
       .eq('id', id)
       .select()
-      .single()
+      .single<BlockPart>()
   },
 
   async delete(id: string, userId: string) {
-    return (supabase as any)
-      .from('BlockPart')
+    return supabase.from('BlockPart')
       .update({
         deletedAt: new Date().toISOString(),
         deletedBy: userId,

@@ -11,6 +11,7 @@ import RomPathModal from './RomPathModal'
 import NotificationModal from './NotificationModal'
 import { createBuildOrchestrator, type BuildProgressCallback } from '../lib/build-orchestrator'
 import { sortBlockPartsInPlace } from '../lib/sort-utils'
+import { createId } from '@paralleldrive/cuid2'
 
 interface BlockWithAddresses extends Block {
   startAddress?: number
@@ -26,6 +27,7 @@ interface BaseGridRow {
   parentId?: string // For parts, this is the block ID
   isExpanded?: boolean // For blocks with parts
   isDirty?: boolean // Has unsaved changes
+  isNew?: boolean // True for new rows not yet persisted to database
   originalData?: any // Original values before editing
 }
 
@@ -104,6 +106,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
   // Inline editing state
   const [editingCells, setEditingCells] = useState<Set<string>>(new Set()) // Set of "rowId:fieldKey"
   const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set()) // Set of row IDs with unsaved changes
+  const [newRows, setNewRows] = useState<Set<string>>(new Set()) // Set of row IDs for new rows not yet persisted
   const [editingData, setEditingData] = useState<{ [rowId: string]: Record<string, any> }>({}) // Temporary editing values
 //  const [originalData, setOriginalData] = useState<{ [rowId: string]: GridRow }>({}) // Original values for revert
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({}) // "rowId:fieldKey" -> error message
@@ -549,6 +552,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
         level: 0,
         isExpanded: expandedBlocks.has(block.id),
         isDirty: dirtyRows.has(block.id),
+        isNew: newRows.has(block.id),
         name: block.name,
         startAddress: block.startAddress,
         endAddress: block.endAddress,
@@ -581,6 +585,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
             parentId: block.id,
             blockId: part.blockId,
             isDirty: dirtyRows.has(part.id),
+            isNew: newRows.has(part.id),
             name: part.name,
             location: part.location,
             size: part.size,
@@ -600,7 +605,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
     })
 
     return rows
-  }, [currentBankBlocks, expandedBlocks, dirtyRows])
+  }, [currentBankBlocks, expandedBlocks, dirtyRows, newRows])
 
   // Inline editing functions
   const startCellEdit = useCallback((rowId: string, fieldKey: string, currentValue: any) => {
@@ -703,23 +708,65 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
 
     try {
       if (row.rowType === 'block') {
-        // Update block - only include fields that were actually edited
-        const updates: Record<string, any> = {}
-        if ('name' in rowData) updates.name = rowData.name
-        if ('movable' in rowData) updates.movable = rowData.movable
-        if ('group' in rowData) updates.group = rowData.group
-        if ('scene' in rowData) updates.scene = rowData.scene
-        if ('postProcess' in rowData) updates.postProcess = rowData.postProcess
+        const blockInState = blocksWithAddresses.find(b => b.id === rowId)
 
-        const { error } = await db.blocks.update(rowId, updates, user.id)
-        if (error) throw new Error(error.message)
+        if (row.isNew && blockInState) {
+          // Create new block in database
+          const blockData = {
+            id: rowId, // Use the CUID we already generated
+            name: rowData.name?.trim() || blockInState.name,
+            movable: rowData.movable ?? blockInState.movable ?? false,
+            group: rowData.group ?? blockInState.group ?? null,
+            scene: rowData.scene ?? blockInState.scene ?? null,
+            postProcess: rowData.postProcess ?? blockInState.postProcess ?? null,
+            meta: blockInState.meta ?? null,
+            projectId: blockInState.projectId
+          }
+
+          const { data, error } = await db.blocks.create(blockData, user.id)
+          if (error) throw new Error(error.message)
+
+          if (data) {
+            // Replace temporary block with real block in local state (immutable update)
+            setBlocksWithAddresses(prev => {
+              return prev.map(block => {
+                if (block.id === rowId) {
+                  return {
+                    ...block,
+                    ...data,
+                    parts: block.parts // Preserve parts array
+                  }
+                }
+                return block
+              })
+            })
+          }
+
+          // Remove from newRows set
+          setNewRows(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(rowId)
+            return newSet
+          })
+        } else {
+          // Update existing block - only include fields that were actually edited
+          const updates: Record<string, any> = {}
+          if ('name' in rowData) updates.name = rowData.name
+          if ('movable' in rowData) updates.movable = rowData.movable
+          if ('group' in rowData) updates.group = rowData.group
+          if ('scene' in rowData) updates.scene = rowData.scene
+          if ('postProcess' in rowData) updates.postProcess = rowData.postProcess
+
+          const { error } = await db.blocks.update(rowId, updates, user.id)
+          if (error) throw new Error(error.message)
+        }
 
       } else if (row.rowType === 'part') {
-        const isNewPart = rowId.startsWith('temp-')
 
-        if (isNewPart) {
+        if (row.isNew) {
           // Create new part in database
           const partData = {
+            id: rowId, // Use the CUID we already generated
             name: rowData.name?.trim() || '',
             location: rowData.location ?? 0,
             size: rowData.size ?? 0,
@@ -755,6 +802,13 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
               })
             })
           }
+
+          // Remove from newRows set
+          setNewRows(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(rowId)
+            return newSet
+          })
         } else {
           // Update existing part - only include fields that were actually edited
           const updates: Record<string, any> = {}
@@ -841,24 +895,38 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
     }
   }, [user?.id, validateRow, editingData, gridRows])
 
-  const cancelRow = useCallback((rowId: string, blockId: string) => {
-    const isNewPart = rowId.startsWith('temp-')
+  const cancelRow = useCallback((rowId: string, blockId?: string) => {
+    const row = gridRows.find(r => r.id === rowId)
 
-    if (isNewPart) {
-      // Remove temporary part from local state (immutable update)
-      setBlocksWithAddresses(prev => {
-        return prev.map(block => {
-          if (block.id === blockId && block.parts) {
-            // Create new block with filtered parts array (immutable update)
-            const updatedBlock = {
-              ...block,
-              parts: block.parts.filter(part => part.id !== rowId)
+    if (row?.isNew) {
+      if (row.rowType === 'part' && blockId) {
+        // Remove new part from local state (immutable update)
+        setBlocksWithAddresses(prev => {
+          return prev.map(block => {
+            if (block.id === blockId && block.parts) {
+              // Create new block with filtered parts array (immutable update)
+              const updatedBlock = {
+                ...block,
+                parts: block.parts.filter(part => part.id !== rowId)
+              }
+              handlePartChange(updatedBlock)
+              return updatedBlock
             }
-            handlePartChange(updatedBlock)
-            return updatedBlock
-          }
-          return block
+            return block
+          })
         })
+      } else if (row.rowType === 'block') {
+        // Remove new block from local state (immutable update)
+        setBlocksWithAddresses(prev => {
+          return prev.filter(block => block.id !== rowId)
+        })
+      }
+
+      // Remove from newRows set
+      setNewRows(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(rowId)
+        return newSet
       })
     }
 
@@ -902,7 +970,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
       })
       return newSet
     })
-  }, [])
+  }, [gridRows, dirtyRows, handlePartChange])
 
   // Keyboard navigation
   const getEditableCells = useCallback((): string[] => {
@@ -1395,12 +1463,12 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
     // Calculate next part index for naming (hexadecimal format)
     const partName = `part_${nextLocation.toString(16).toUpperCase().padStart(6, '0')}`
 
-    // Generate a temporary ID for the new part
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+    // Generate a unique ID using createId()
+    const newPartId = createId()
 
     // Create new part as a temporary object
     const newPart: BlockPart = {
-      id: tempId,
+      id: newPartId,
       name: partName,
       location: nextLocation,
       size: 0,
@@ -1431,13 +1499,14 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
       })
     })
 
-    // Mark the new part as dirty
-    setDirtyRows(prev => new Set([...prev, tempId]))
+    // Mark the new part as dirty and new
+    setDirtyRows(prev => new Set([...prev, newPartId]))
+    setNewRows(prev => new Set([...prev, newPartId]))
 
     // Initialize editing data with default values (including calculated end)
     setEditingData(prev => ({
       ...prev,
-      [tempId]: {
+      [newPartId]: {
         name: partName,
         location: nextLocation,
         size: 0,
@@ -1452,7 +1521,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
 
     // Auto-focus the "end" field after the part is rendered
     setTimeout(() => {
-      const endCellKey = `${tempId}:end`
+      const endCellKey = `${newPartId}:end`
       const endCell = document.querySelector(`[data-cell-key="${endCellKey}"]`) as HTMLElement
       if (endCell) {
         endCell.click() // Trigger edit mode
@@ -1460,7 +1529,84 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
     }, 100)
   }, [blocksWithAddresses, user, handlePartChange])
 
+  const handleAddBlock = useCallback(() => {
+    if (!user?.id || !projectId) {
+      console.error('User not authenticated or project not available')
+      return
+    }
 
+    // Calculate startAddress as max(endAddress) from all existing blocks in the current bank
+    const blocksInCurrentBank = currentBankBlocks
+    let startAddress = currentBank << 16 // Default to bank base address (e.g., 0x000000, 0x010000, etc.)
+
+    if (blocksInCurrentBank.length > 0) {
+      // Find the maximum endAddress in the current bank
+      const maxEndAddress = Math.max(
+        ...blocksInCurrentBank
+          .filter(block => block.endAddress !== undefined && block.endAddress !== null)
+          .map(block => block.endAddress!)
+      )
+
+      // If we found valid end addresses, use the max as the start address
+      if (maxEndAddress > startAddress) {
+        startAddress = maxEndAddress
+      }
+    }
+
+    // Generate block name as 'chunk_{startAddress in hex}'
+    const blockName = `chunk_${startAddress.toString(16).padStart(6, '0')}`
+
+    // Generate a unique ID using createId()
+    const newBlockId = createId()
+
+    // Create new block as a temporary object (dirty local state)
+    const newBlock: BlockWithAddresses = {
+      id: newBlockId,
+      name: blockName,
+      movable: false,
+      group: null,
+      scene: null,
+      postProcess: null,
+      meta: null,
+      projectId: projectId,
+      startAddress: startAddress,
+      endAddress: startAddress, // Will be updated when parts are added
+      parts: [],
+      createdAt: new Date(),
+      createdBy: user.id,
+      updatedAt: null,
+      updatedBy: null,
+      deletedAt: null,
+      deletedBy: null
+    }
+
+    // Add to local state without persisting to database (immutable update)
+    setBlocksWithAddresses(prev => [...prev, newBlock])
+
+    // Mark the new block as dirty and new
+    setDirtyRows(prev => new Set([...prev, newBlockId]))
+    setNewRows(prev => new Set([...prev, newBlockId]))
+
+    // Initialize editing data with default values
+    setEditingData(prev => ({
+      ...prev,
+      [newBlockId]: {
+        name: blockName,
+        movable: false,
+        group: null,
+        postProcess: null
+      }
+    }))
+
+    // Auto-focus the "name" field after the block is rendered
+    setTimeout(() => {
+      const nameCellKey = `${newBlockId}:name`
+      const nameCell = document.querySelector(`[data-cell-key="${nameCellKey}"]`) as HTMLElement
+      if (nameCell) {
+        nameCell.click() // Trigger edit mode
+      }
+    }, 100)
+  }, [user, projectId, currentBank, currentBankBlocks])
 
   const handleDeletePart = async (partId: string, blockId: string) => {
     if (!user?.id) return
@@ -1681,18 +1827,6 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
     })
   }, [columns, expandedBlocks, handleViewArtifact])
 
-  if (availableBanks.length === 0) {
-    return (
-      <DataTable
-        {...props}
-        data={[]}
-        columns={enhancedColumns}
-        loading={props.loading || partsLoading || !dataReady}
-        error={props.error || partsError}
-        emptyMessage="No blocks found. Click 'Add Block' to create your first entry."
-      />
-    )
-  }
 
   return (
     <div className="space-y-4">
@@ -1748,6 +1882,18 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
           {/* Build Button */}
           {project && (
             <button
+              onClick={handleAddBlock}
+              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Add New Block"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Block
+            </button>
+          )}
+
+          {/* Build Button */}
+          {project && (
+            <button
               onClick={handleBuildProject}
               disabled={isBuilding || blocksWithAddresses.length === 0}
               className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1793,21 +1939,34 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {gridRows.map((row, index) => {
-                const isDirty = dirtyRows.has(row.id)
-                const isSaving = savingRows.has(row.id)
-                const isBlock = row.rowType === 'block'
-                const isPart = row.rowType === 'part'
+              {gridRows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <p className="text-sm font-medium mb-2">No blocks found in this bank</p>
+                      <p className="text-xs text-gray-400">
+                        Click "Add Block" to create your first block, or switch to a different bank.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                gridRows.map((row, index) => {
+                  const isNew = newRows.has(row.id)
+                  const isDirty = dirtyRows.has(row.id)
+                  const isSaving = savingRows.has(row.id)
+                  const isBlock = row.rowType === 'block'
+                  const isPart = row.rowType === 'part'
 
-                return (
-                  <tr
-                    key={row.id}
-                    className={clsx(
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50',
-                      isDirty && 'bg-yellow-50 border-l-4 border-yellow-400',
-                      isPart && 'bg-blue-50/30'
-                    )}
-                  >
+                  return (
+                    <tr
+                      key={row.id}
+                      className={clsx(
+                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50',
+                        isDirty && 'bg-yellow-50 border-l-4 border-yellow-400',
+                        isPart && 'bg-blue-50/30'
+                      )}
+                    >
                     {/* Expand/Collapse Column */}
                     <td className="px-3 py-2 whitespace-nowrap">
                       {isBlock && (
@@ -1907,7 +2066,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
                               <Check className={clsx("h-4 w-4", isSaving && "animate-pulse")} />
                             </button>
                             <button
-                              onClick={() => cancelRow(row.id, (row as PartGridRow).blockId)}
+                              onClick={() => cancelRow(row.id, isPart ? (row as PartGridRow).blockId : undefined)}
                               disabled={isSaving}
                               className={clsx(
                                 "text-gray-600 hover:text-gray-900",
@@ -1930,7 +2089,7 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
                           </button>
                         )}
 
-                        {isPart && (
+                        {isPart && !isNew && (
                           <button
                             onClick={() => handleDeletePart(row.id, (row as PartGridRow).blockId)}
                             className="text-red-600 hover:text-red-900"
@@ -1953,7 +2112,8 @@ export default function BlocksDataTable({ projectId, project, onBuildComplete, c
                     </td>
                   </tr>
                 )
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>
